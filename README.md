@@ -13,6 +13,7 @@
 - 电脑端批准、设备撤销、一小时短会话和 WebSocket 代理。
 - 为旧版 Android WebView 补充 `Object.hasOwn`、`crypto.randomUUID`、`structuredClone` 和 `Array.prototype.at` 兼容实现。
 - 手机端显示 Harness 工作区、会话和模型选择界面；数据仍由电脑上的 Harness 管理。
+- 使用 Harness 官方应用内目录浏览器，手机和平板可以直接浏览并选择电脑目录，不会在电脑上弹出原生文件夹窗口。
 
 ## 仓库结构
 
@@ -29,11 +30,13 @@ desktop/   独立 Electron 配对面板、认证网关与 HTTPS 隧道
 
 ### 1. 启动 Harness Web 服务
 
-本项目不捆绑 Harness。请使用你自己的 Harness 安装，并让 Web 服务只监听本机。例如固定使用端口 `32145`：
+本项目不捆绑 Harness。请使用你自己的 Harness 安装，并让 Web 服务只监听本机。远程客户端应加载仓库提供的目录选择补丁，这只切换 Harness 官方的目录选择组件，不包含或修改 DSH 源码。例如固定使用端口 `32145`：
 
 ```powershell
-dsh web --no-open --port 32145
+dsh web --patch .\desktop\dsh-remote.patch.yml --no-open --port 32145
 ```
+
+加载补丁后，电脑、手机和平板都使用页面内的电脑目录浏览器；工作区记录仍保存在同一个电脑端 Harness 数据目录中，因此各设备共享同一份工作区列表。路径输入框也可以直接填写电脑上的绝对路径，例如 `D:\agentyy\codex`。
 
 ### 2. 启动电脑端远程桥接
 
@@ -84,7 +87,7 @@ npm ci
 npm run dist
 ```
 
-构建产物不会包含 DSH，只包含远程桥接和经哈希校验下载的 `cloudflared`。运行时需要另行启动本机 Harness Web 服务。
+构建产物不会包含 DSH，只包含远程桥接、目录选择配置和经哈希校验下载的 `cloudflared`。运行时需要另行启动本机 Harness Web 服务。
 
 ## 配对流程
 

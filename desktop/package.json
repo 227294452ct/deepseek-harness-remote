@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-remote-desktop",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Remote pairing and secure tunnel companion for a locally running DeepSeek Harness web service",
   "main": "companion.cjs",
   "author": "DeepSeek Harness Remote contributors",
@@ -32,6 +32,7 @@
       "remote-gateway.cjs",
       "remote-preload.cjs",
       "remote.html",
+      "dsh-remote.patch.yml",
       "build/icon.png",
       "package.json"
     ],
@@ -39,6 +40,10 @@
       {
         "from": "vendor/cloudflared.exe",
         "to": "cloudflared.exe"
+      },
+      {
+        "from": "dsh-remote.patch.yml",
+        "to": "dsh-remote.patch.yml"
       }
     ],
     "win": {

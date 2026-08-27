@@ -4,6 +4,8 @@ desktop/vendor/
 desktop/dist/
 desktop/*.tgz
 desktop/*.log
+.playwright-cli/
+output/
 
 # Android local state and builds
 android/.gradle/
