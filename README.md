@@ -14,6 +14,7 @@
 - 为旧版 Android WebView 补充 `Object.hasOwn`、`crypto.randomUUID`、`structuredClone` 和 `Array.prototype.at` 兼容实现。
 - 手机端显示 Harness 工作区、会话和模型选择界面；数据仍由电脑上的 Harness 管理。
 - 使用 Harness 官方应用内目录浏览器，手机和平板可以直接浏览并选择电脑目录，不会在电脑上弹出原生文件夹窗口。
+- 针对手机竖屏优化会话顶部栏、提问卡片和计划确认卡片，操作按钮不会被挤出可点击区域。
 
 ## 仓库结构
 

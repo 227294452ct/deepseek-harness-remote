@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-remote-desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Remote pairing and secure tunnel companion for a locally running DeepSeek Harness web service",
   "main": "companion.cjs",
   "author": "DeepSeek Harness Remote contributors",
@@ -8,7 +8,8 @@
   "scripts": {
     "prepare:cloudflared": "node scripts/prepare-cloudflared.cjs",
     "start": "electron .",
-    "test": "node test-remote-gateway.cjs",
+    "test": "node test-remote-gateway.cjs && electron test-mobile-layout.cjs",
+    "test:layout": "electron test-mobile-layout.cjs",
     "test:ui": "electron test-remote-ui.cjs",
     "dist": "npm run prepare:cloudflared && electron-builder --win nsis portable --x64"
   },

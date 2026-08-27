@@ -125,6 +125,11 @@ async function main() {
     assert.match(compatSource, /structuredClone/)
     assert.match(compatSource, /defineAt/)
     assert.match(compatSource, /选择模型/)
+    assert.match(compatSource, /data-dsh-remote-mobile-layout/)
+    assert.match(compatSource, /data-question-key/)
+    assert.match(compatSource, /grid-template-columns: repeat\(2/)
+    assert.match(compatSource, /orientation: portrait/)
+    assert.match(compatSource, /data-dsh-remote-session-log/)
     assert.doesNotThrow(() => new vm.Script(compatSource))
 
     const proxied = await fetch(base, { headers: {

@@ -135,6 +135,60 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     })
   }
 
+  const MOBILE_LAYOUT_STYLE_ID = 'dsh-remote-mobile-layout'
+  const mobileLayoutCss = [
+    '@media (max-width: 720px) and (orientation: portrait) {',
+    '  html, body { max-width: 100vw; overflow-x: hidden; }',
+    '  [data-dsh-remote-session-header] { min-width: 0 !important; padding: 8px 10px 0 !important; }',
+    '  [data-dsh-remote-session-header] > div:first-child { min-width: 0 !important; gap: 6px !important; }',
+    '  [data-dsh-remote-header-utilities] { min-width: 0 !important; max-width: 42vw !important; margin-left: 6px !important; gap: 4px !important; overflow-x: auto !important; overscroll-behavior-inline: contain; scrollbar-width: none; }',
+    '  [data-dsh-remote-header-utilities]::-webkit-scrollbar { display: none; }',
+    '  [data-dsh-remote-session-log] { min-width: 0 !important; max-width: 100% !important; min-height: 36px !important; padding-inline: 10px !important; }',
+    '  [data-dsh-remote-session-header] [role="tablist"] { min-width: 0 !important; gap: 24px !important; padding-left: 4px !important; overflow-x: auto !important; scrollbar-width: none; }',
+    '  [data-dsh-remote-session-header] [role="tablist"]::-webkit-scrollbar { display: none; }',
+    '  [data-question-key], [data-plan-review-key] { box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; padding: 6px 8px calc(10px + env(safe-area-inset-bottom)) !important; }',
+    '  [data-question-key] > section, [data-plan-review-key] > section { box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; border-radius: 14px !important; }',
+    '  [data-question-key] > section > header { min-width: 0 !important; gap: 8px !important; padding: 12px 12px 0 14px !important; }',
+    '  [data-question-key] > section > header > :first-child { min-width: 0 !important; }',
+    '  [data-question-key] > section > header h2 { overflow-wrap: anywhere !important; word-break: break-word !important; }',
+    '  [data-question-key] > section > [data-question-scroll] { min-width: 0 !important; }',
+    '  [data-question-key] > section > [data-question-scroll] button { max-width: 100% !important; min-width: 0 !important; overflow-wrap: anywhere !important; }',
+    '  [data-question-key] > section > footer { display: grid !important; grid-template-columns: auto minmax(0, 1fr) !important; align-items: center !important; gap: 8px !important; margin-top: 8px !important; padding: 8px 10px 2px !important; }',
+    '  [data-question-key] > section > footer > :nth-child(2) { min-width: 0 !important; overflow-wrap: anywhere !important; }',
+    '  [data-question-key] > section > footer > :last-child { grid-column: 1 / -1 !important; box-sizing: border-box !important; width: 100% !important; min-width: 0 !important; display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }',
+    '  [data-question-key] > section > footer > :last-child > button { box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; min-height: 42px !important; padding-inline: 10px !important; white-space: normal !important; }',
+    '  [data-plan-review-key] > section > footer { align-items: stretch !important; flex-direction: column !important; gap: 8px !important; padding: 8px 12px 10px !important; }',
+    '  [data-plan-review-key] > section > footer > :last-child { box-sizing: border-box !important; width: 100% !important; min-width: 0 !important; display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }',
+    '  [data-plan-review-key] > section > footer > :last-child > button { box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; min-height: 42px !important; white-space: normal !important; }',
+    '}',
+    '@media (max-width: 420px) and (orientation: portrait) {',
+    '  [data-dsh-remote-session-log] { width: 36px !important; padding: 0 !important; justify-content: center !important; }',
+    '  [data-dsh-remote-session-log] span { display: none !important; }',
+    '}'
+  ].join('\\n')
+
+  const installRemoteMobileLayout = () => {
+    if (document.getElementById(MOBILE_LAYOUT_STYLE_ID)) return
+    const style = document.createElement('style')
+    style.id = MOBILE_LAYOUT_STYLE_ID
+    style.setAttribute('data-dsh-remote-mobile-layout', '')
+    style.textContent = mobileLayoutCss
+    ;(document.head || document.documentElement).appendChild(style)
+  }
+
+  const markRemoteMobileLayout = () => {
+    document.querySelectorAll('button').forEach(button => {
+      if (!(button.textContent || '').trim().startsWith('Session log')) return
+      button.setAttribute('data-dsh-remote-session-log', '')
+      if (!button.getAttribute('aria-label')) button.setAttribute('aria-label', 'Session log')
+      if (!button.getAttribute('title')) button.setAttribute('title', 'Session log')
+      const utilities = button.parentElement
+      if (utilities) utilities.setAttribute('data-dsh-remote-header-utilities', '')
+      const header = button.closest('header')
+      if (header) header.setAttribute('data-dsh-remote-session-header', '')
+    })
+  }
+
   const revealRemoteControls = () => {
     const buttons = document.querySelectorAll('button[aria-label]')
     buttons.forEach(button => {
@@ -155,10 +209,16 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     })
   }
 
+  const refreshRemoteCompatibility = () => {
+    installRemoteMobileLayout()
+    markRemoteMobileLayout()
+    revealRemoteControls()
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', revealRemoteControls, { once: true })
-  } else revealRemoteControls()
-  new MutationObserver(revealRemoteControls).observe(document.documentElement, {
+    document.addEventListener('DOMContentLoaded', refreshRemoteCompatibility, { once: true })
+  } else refreshRemoteCompatibility()
+  new MutationObserver(refreshRemoteCompatibility).observe(document.documentElement, {
     childList: true,
     subtree: true
   })
@@ -758,4 +818,4 @@ class RemoteGateway extends EventEmitter {
   }
 }
 
-module.exports = { RemoteGateway, API_PREFIX, COOKIE_NAME }
+module.exports = { RemoteGateway, API_PREFIX, COOKIE_NAME, MOBILE_COMPAT_SCRIPT }

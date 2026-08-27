@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>DeepSeek Harness Remote portrait layout fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; font-family: Inter, "Segoe UI", sans-serif; color: #111827; background: #fff; }
+    button { font: inherit; }
+    .app { display: grid; grid-template-columns: 64px minmax(0, 1fr); width: 100%; height: 100%; overflow: hidden; }
+    .rail { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 24px 0; border-right: 1px solid #e5e7eb; background: #f8fafc; }
+    .rail-mark { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #111827; color: #fff; font-weight: 800; }
+    .rail-button { width: 40px; height: 40px; border: 0; border-radius: 12px; background: transparent; color: #111827; font-size: 22px; }
+    .rail .settings { margin-top: auto; }
+    .conversation { position: relative; min-width: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+    .session-header { flex: none; padding: 12px 20px 0; border-bottom: 1px solid #e5e7eb; background: rgba(255,255,255,.96); }
+    .title-row { display: flex; align-items: center; min-height: 40px; }
+    .title-cluster { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
+    .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+    .mode { flex: none; color: #6b7280; white-space: nowrap; }
+    .utilities { flex: none; display: flex; gap: 8px; margin-left: 20px; }
+    .session-log { height: 36px; min-width: 111px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #d1d5db; border-radius: 18px; background: #fff; }
+    .tabs { display: flex; gap: 36px; margin-top: 4px; padding-left: 8px; }
+    .tab { padding: 10px 0 12px; color: #6b7280; border-bottom: 3px solid transparent; }
+    .tab.active { color: #2563eb; border-color: #2563eb; }
+    .chat { min-height: 0; flex: 1; overflow: auto; padding: 28px 16px 220px; }
+    .message { font-size: 21px; line-height: 1.55; max-width: 270px; }
+    .status { margin-top: 22px; color: #6b7280; }
+    .diving { margin-top: 24px; color: #2563eb; font-weight: 600; }
+    .question-frame { position: absolute; z-index: 2; left: 0; right: 0; bottom: 10px; padding: 6px 32px 10px; display: flex; justify-content: center; }
+    .question-card { width: 100%; max-height: min(60vh, 520px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d9dde5; border-radius: 20px; background: rgba(255,255,255,.98); box-shadow: 0 12px 36px rgba(15,23,42,.14); }
+    .question-header { display: flex; justify-content: space-between; gap: 12px; padding: 14px 14px 0 18px; }
+    .eyebrow { margin: 0 0 5px; color: #6b7280; font-size: 12px; }
+    h2 { margin: 0; font-size: 16px; line-height: 1.45; }
+    .close { flex: none; width: 34px; height: 34px; border: 0; background: transparent; font-size: 25px; color: #6b7280; }
+    .question-body { min-height: 0; overflow-y: auto; padding: 10px 16px; }
+    .option { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 8px; width: 100%; padding: 9px 0; border: 0; text-align: left; background: transparent; }
+    .number { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: #f1f5f9; color: #64748b; }
+    .option strong { display: block; line-height: 1.35; }
+    .option small { display: block; margin-top: 5px; color: #6b7280; line-height: 1.4; }
+    .question-footer { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding: 0 10px 10px 18px; }
+    .pager { flex: none; display: flex; align-items: center; gap: 6px; color: #4b5563; white-space: nowrap; }
+    .feedback { min-width: 0; flex: 1; color: #6b7280; font-size: 12px; }
+    .actions { flex: none; display: flex; align-items: center; gap: 12px; }
+    .actions button { min-width: 108px; height: 42px; padding: 0 16px; border-radius: 21px; border: 1px solid #d1d5db; background: #fff; white-space: nowrap; }
+    .actions .primary { border-color: #111827; background: #111827; color: #fff; }
+  </style>
+  <script src="/compat.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail" aria-label="主导航">
+      <div class="rail-mark">鲸</div>
+      <button class="rail-button" aria-label="新会话">＋</button>
+      <button class="rail-button" aria-label="工作区">□</button>
+      <button class="rail-button" aria-label="搜索">⌕</button>
+      <button class="rail-button settings" aria-label="设置">⚙</button>
+    </aside>
+    <main class="conversation">
+      <header class="session-header">
+        <div class="title-row">
+          <div class="title-cluster">
+            <span class="title">定时任务在 Codex 页面发送继续</span>
+            <span class="mode">标准模式</span>
+          </div>
+          <div class="utilities">
+            <button class="session-log"><span>Session log</span><b aria-hidden="true">⇩</b></button>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="会话视图">
+          <span class="tab active" role="tab">对话</span>
+          <span class="tab" role="tab">轨迹</span>
+        </div>
+      </header>
+      <div class="chat">
+        <div class="message">Let me ask a few clarifying questions so I build the right thing.</div>
+        <div class="status">ⓘ 提问 · 等待回答</div>
+        <div class="diving">Deep diving…</div>
+      </div>
+      <div class="question-frame" data-question-key="portrait-layout-test">
+    <section class="question-card">
+      <header class="question-header">
+        <div>
+          <p class="eyebrow">目标页面</p>
+          <h2>“Codex 页面”具体指哪个？我需要知道在哪里发送“继续”。</h2>
+        </div>
+        <button class="close" aria-label="关闭">×</button>
+      </header>
+      <div class="question-body" data-question-scroll>
+        <button class="option"><span class="number">1</span><span><strong>已打开的 Codex 对话</strong><small>定位到当前标签页并发送“继续”。</small></span></button>
+        <button class="option"><span class="number">2</span><span><strong>有具体 URL 的网页</strong><small>提供网址后自动打开并发送。</small></span></button>
+        <button class="option"><span class="number">3</span><span><strong>DeepSeek Harness 的某个页面</strong><small>在当前远程会话内操作。</small></span></button>
+      </div>
+      <footer class="question-footer">
+        <div class="pager"><button aria-label="上一题">‹</button><span>1 / 3</span><button aria-label="下一题">›</button></div>
+        <div class="feedback" role="status"></div>
+        <div class="actions">
+          <button>跳过本题</button>
+          <button class="primary">下一题</button>
+        </div>
+      </footer>
+    </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
