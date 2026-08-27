@@ -1,0 +1,60 @@
+{
+  "name": "deepseek-harness-remote-desktop",
+  "version": "0.3.0",
+  "description": "Remote pairing and secure tunnel companion for a locally running DeepSeek Harness web service",
+  "main": "companion.cjs",
+  "author": "DeepSeek Harness Remote contributors",
+  "license": "MIT",
+  "scripts": {
+    "prepare:cloudflared": "node scripts/prepare-cloudflared.cjs",
+    "start": "electron .",
+    "test": "node test-remote-gateway.cjs",
+    "test:ui": "electron test-remote-ui.cjs",
+    "dist": "npm run prepare:cloudflared && electron-builder --win nsis portable --x64"
+  },
+  "dependencies": {
+    "http-proxy": "1.18.1",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "electron": "43.4.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "community.deepseek.harness.remote",
+    "productName": "DeepSeek Harness Remote",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "companion.cjs",
+      "remote-gateway.cjs",
+      "remote-preload.cjs",
+      "remote.html",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/cloudflared.exe",
+        "to": "cloudflared.exe"
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeepSeek Harness Remote",
+      "artifactName": "DeepSeek-Harness-Remote-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "DeepSeek-Harness-Remote-Portable-${version}-${arch}.${ext}"
+    }
+  }
+}

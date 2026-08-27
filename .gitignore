@@ -1,0 +1,35 @@
+# Desktop dependencies and builds
+desktop/node_modules/
+desktop/vendor/
+desktop/dist/
+desktop/*.tgz
+desktop/*.log
+
+# Android local state and builds
+android/.gradle/
+android/.kotlin/
+android/.idea/
+android/local.properties
+android/**/build/
+android/captures/
+
+# Signing material and credentials
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.clixml
+.env
+.env.*
+
+# Runtime state
+remote-devices.json
+remote-settings.json
+logs/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*.swp

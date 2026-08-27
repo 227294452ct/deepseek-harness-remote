@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>DeepSeek Harness 手机远程</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Microsoft YaHei UI", system-ui, sans-serif; background:#07111f; color:#edf5ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 76% 4%,rgba(41,132,255,.20),transparent 36%),linear-gradient(145deg,#07111f,#0c1d32); }
+    main { width:min(920px,calc(100% - 40px)); margin:0 auto; padding:34px 0 46px; }
+    header { display:flex; align-items:center; gap:16px; margin-bottom:28px; }
+    .logo { width:54px; height:54px; border-radius:17px; object-fit:cover; box-shadow:0 16px 38px rgba(18,97,220,.30),0 2px 8px rgba(0,0,0,.26); }
+    h1 { font-size:25px; margin:0 0 4px; }
+    .sub { color:#8ea8c8; font-size:13px; }
+    .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; }
+    .card { background:rgba(10,27,47,.84); border:1px solid rgba(147,190,235,.15); border-radius:22px; padding:22px; box-shadow:0 20px 60px rgba(0,0,0,.22); }
+    .card h2 { font-size:16px; margin:0 0 16px; }
+    .status { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+    .dot { width:10px; height:10px; border-radius:50%; background:#6f829c; box-shadow:0 0 0 5px rgba(111,130,156,.12); }
+    .dot.on { background:#42d69c; box-shadow:0 0 0 5px rgba(66,214,156,.13); }
+    .label { font-size:14px; font-weight:600; }
+    .detail { color:#8ea8c8; font-size:12px; margin-top:3px; word-break:break-all; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
+    button { appearance:none; border:0; border-radius:11px; padding:10px 15px; font:600 13px inherit; cursor:pointer; color:#eff7ff; background:#173452; }
+    button.primary { background:linear-gradient(135deg,#338fff,#176ae7); box-shadow:0 10px 26px rgba(23,106,231,.25); }
+    button.danger { color:#ffb8bd; background:rgba(196,54,66,.17); }
+    button:disabled { cursor:not-allowed; opacity:.45; }
+    .qr { display:none; text-align:center; }
+    .qr.visible { display:block; }
+    .qr img { width:min(280px,100%); border-radius:18px; padding:12px; background:white; }
+    .code { font:700 30px/1.2 "Cascadia Mono",monospace; letter-spacing:.18em; margin:12px 0 5px; }
+    .hint { color:#8ea8c8; font-size:12px; line-height:1.65; }
+    .pending { display:none; margin-top:14px; padding:13px; border-radius:13px; background:rgba(53,139,255,.10); border:1px solid rgba(73,153,255,.24); }
+    .pending.visible { display:block; }
+    .devices { display:grid; gap:10px; }
+    .device { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:13px; border-radius:14px; background:rgba(255,255,255,.035); }
+    .device.revoked { opacity:.5; }
+    .empty { color:#6f86a3; font-size:13px; padding:15px 0; }
+    .note { margin-top:18px; padding:14px 16px; color:#a9bdd6; background:rgba(255,255,255,.035); border-radius:14px; font-size:12px; line-height:1.7; }
+    .error { color:#ff9da5; margin-top:12px; font-size:12px; min-height:18px; }
+    @media (max-width:720px) { .grid { grid-template-columns:1fr; } main { width:min(100% - 24px,560px); padding-top:22px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><img class="logo" src="build/icon.png" alt="DeepSeek 鲸鱼图标"><div><h1>手机远程</h1><div class="sub">把本机 Harness Web 服务安全连接到 Android</div></div></header>
+  <div class="grid">
+    <section class="card">
+      <h2>连接状态</h2>
+      <div class="status"><span id="dot" class="dot"></span><div><div id="state" class="label">正在检查…</div><div id="url" class="detail"></div></div></div>
+      <div id="tunnel" class="detail"></div>
+      <div class="actions">
+        <button id="enable" class="primary">启用远程访问</button>
+        <button id="disable">暂停远程访问</button>
+        <button id="pair" class="primary">配对新手机</button>
+      </div>
+      <div id="error" class="error"></div>
+      <div class="note">Harness 服务继续只监听本机回环地址，由内置 HTTPS 隧道转发；手机必须通过一次性二维码、设备密钥和系统解锁认证。此组件不包含 Harness 本体。</div>
+    </section>
+    <section id="qr" class="card qr">
+      <h2>扫描二维码</h2>
+      <img id="qrImage" alt="手机配对二维码">
+      <div id="code" class="code"></div>
+      <div class="hint">二维码五分钟有效。手机提交后，请核对两端六位数字完全一致，再在电脑端批准。</div>
+      <div id="pending" class="pending"><div id="pendingText" class="label"></div><div class="actions"><button id="approve" class="primary">数字一致，批准设备</button></div></div>
+    </section>
+  </div>
+  <section class="card" style="margin-top:18px"><h2>已配对设备</h2><div id="devices" class="devices"><div class="empty">尚未配对手机</div></div></section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id)
+  let currentPairingId = null
+  const showError = (error) => { $('error').textContent = error ? String(error.message || error) : '' }
+  const run = async (operation) => { showError(''); try { await operation(); await refresh() } catch (error) { showError(error) } }
+  function render(status) {
+    const connected = status.running === true
+    $('dot').classList.toggle('on', connected)
+    $('state').textContent = connected ? '远程访问已启用' : '远程访问已暂停'
+    $('url').textContent = status.remoteUrl || ''
+    const tunnel = status.tunnel || {}
+    $('tunnel').textContent = tunnel.installed ? `安全隧道：${tunnel.state || 'Unknown'}${tunnel.error ? ` · ${tunnel.error}` : ''}` : '安全隧道组件：缺失'
+    $('enable').disabled = connected
+    $('disable').disabled = !connected
+    $('pair').disabled = !connected
+    const devices = status.devices || []
+    $('devices').innerHTML = devices.length ? '' : '<div class="empty">尚未配对手机</div>'
+    for (const device of devices) {
+      const row = document.createElement('div')
+      row.className = `device${device.revokedAt ? ' revoked' : ''}`
+      const info = document.createElement('div')
+      const name = document.createElement('div'); name.className = 'label'; name.textContent = device.name
+      const meta = document.createElement('div'); meta.className = 'detail'; meta.textContent = `${device.tailscaleLogin || '内置安全隧道'}${device.lastSeenAt ? ` · 最近连接 ${new Date(device.lastSeenAt).toLocaleString()}` : ''}${device.revokedAt ? ' · 已撤销' : ''}`
+      info.append(name, meta); row.append(info)
+      if (!device.revokedAt) { const button = document.createElement('button'); button.className='danger'; button.textContent='撤销'; button.onclick=()=>run(()=>window.dshRemote.revokeDevice(device.id)); row.append(button) }
+      $('devices').append(row)
+    }
+  }
+  async function refresh() { render(await window.dshRemote.getStatus()) }
+  $('enable').onclick = () => run(window.dshRemote.enable)
+  $('disable').onclick = () => run(window.dshRemote.disable)
+  $('pair').onclick = () => run(async () => { const pairing=await window.dshRemote.createPairing(); currentPairingId=pairing.pairingId; $('qrImage').src=pairing.qrDataUrl; $('code').textContent=pairing.verificationCode; $('qr').classList.add('visible'); $('pending').classList.remove('visible') })
+  $('approve').onclick = () => run(async () => { await window.dshRemote.approvePairing(currentPairingId); $('pending').classList.remove('visible') })
+  window.dshRemote.onStatus(render)
+  window.dshRemote.onPairing((pairing) => { if(pairing.pairingId!==currentPairingId)return; $('code').textContent=pairing.verificationCode; if(pairing.status==='pending'){ $('pendingText').textContent=`${pairing.deviceName} · ${pairing.tailscaleLogin}`; $('pending').classList.add('visible') } })
+  void refresh()
+</script>
+</body>
+</html>
