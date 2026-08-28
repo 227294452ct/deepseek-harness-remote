@@ -1,14 +1,16 @@
 'use strict'
 
-const { app, BrowserWindow, dialog, ipcMain, session } = require('electron')
+const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, powerMonitor, screen, session } = require('electron')
 const { appendFileSync, mkdirSync } = require('node:fs')
 const path = require('node:path')
 const { RemoteGateway } = require('./remote-gateway.cjs')
+const { createElectronDesktopProvider } = require('./remote-desktop.cjs')
 
 const DEFAULT_UPSTREAM_URL = 'http://127.0.0.1:32145'
 
 let remoteWindow = null
 let remoteGateway = null
+let controlIndicator = null
 let upstreamUrl = null
 let logPath = null
 let shutdownStarted = false
@@ -71,6 +73,44 @@ function broadcastStatus() {
   }
 }
 
+function showControlIndicator(state) {
+  if (!state?.active) {
+    controlIndicator?.hide()
+    return
+  }
+  if (!controlIndicator || controlIndicator.isDestroyed()) {
+    controlIndicator = new BrowserWindow({
+      width: 330,
+      height: 58,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      show: false,
+      focusable: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'control-indicator-preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true
+      }
+    })
+    controlIndicator.setAlwaysOnTop(true, 'screen-saver')
+    controlIndicator.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    controlIndicator.webContents.on('will-navigate', event => event.preventDefault())
+    void controlIndicator.loadFile(path.join(__dirname, 'control-indicator.html'))
+  }
+  const workArea = screen.getPrimaryDisplay().workArea
+  controlIndicator.setPosition(workArea.x + workArea.width - 346, workArea.y + 12, false)
+  controlIndicator.showInactive()
+  const sendState = () => controlIndicator && !controlIndicator.isDestroyed() && controlIndicator.webContents.send('remote:desktop-control', state)
+  if (controlIndicator.webContents.isLoadingMainFrame()) controlIndicator.webContents.once('did-finish-load', sendState)
+  else sendState()
+}
+
 async function enableRemote() {
   const status = await remoteGateway.start(upstreamUrl)
   broadcastStatus()
@@ -90,6 +130,7 @@ function registerIpc() {
   ipcMain.handle('remote:create-pairing', () => remoteGateway.createPairing())
   ipcMain.handle('remote:approve-pairing', (_event, pairingId) => remoteGateway.approvePairing(String(pairingId)))
   ipcMain.handle('remote:revoke-device', (_event, deviceId) => remoteGateway.revokeDevice(String(deviceId)))
+  ipcMain.handle('remote:stop-desktop-control', () => remoteGateway.stopDesktopControl('local-stop', false))
 }
 
 function createRemoteWindow() {
@@ -130,12 +171,22 @@ async function boot() {
   remoteGateway = new RemoteGateway({
     userDataPath: app.getPath('userData'),
     cloudflaredPath: cloudflaredPath(),
-    log: writeLog
+    log: writeLog,
+    desktopProvider: createElectronDesktopProvider({
+      desktopCapturer,
+      screen,
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      log: writeLog
+    })
   })
   remoteGateway.on('status', broadcastStatus)
   remoteGateway.on('pairing', (pairing) => {
     if (remoteWindow && !remoteWindow.isDestroyed()) remoteWindow.webContents.send('remote:pairing', pairing)
   })
+  remoteGateway.on('desktop-control', showControlIndicator)
+  powerMonitor.on('lock-screen', () => remoteGateway.setDesktopLocked(true))
+  powerMonitor.on('unlock-screen', () => remoteGateway.setDesktopLocked(false))
   registerIpc()
   await createRemoteWindow()
   try {

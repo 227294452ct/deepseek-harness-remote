@@ -1,4 +1,4 @@
-# Portrait mobile layout QA
+# Mobile layout and remote desktop QA
 
 ## Scope
 
@@ -23,6 +23,14 @@
 - Both footer actions measured 142 × 42 px and did not overlap.
 - Automated gateway/proxy regression test and portrait layout test passed.
 - Rendered audit image: `output/mobile-layout-portrait.png`.
+
+## Remote desktop overlay audit
+
+- Mobile-only sidebar entry is icon-only in the 64 px collapsed rail and retains `aria-label="桌面"`; the label appears when the rail is expanded.
+- The viewer covers the safe viewport at both 393 × 852 portrait and 852 × 393 landscape sizes without document overflow.
+- Main/secondary display options, connection/control status, keyboard panel and same-URL history state were exercised against the WebSocket fixture.
+- Android-style back navigation removes the viewer before leaving the Harness page.
+- The workspace dialog fixture received `C:\` and `F:\` shortcuts; choosing `F:\` submitted the existing edit-path input instead of bypassing the Harness directory workflow.
 
 ## Severity review
 

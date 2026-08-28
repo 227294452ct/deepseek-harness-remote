@@ -8,7 +8,64 @@ const net = require('node:net')
 const os = require('node:os')
 const path = require('node:path')
 const vm = require('node:vm')
-const { RemoteGateway, API_PREFIX } = require('./remote-gateway.cjs')
+const { RemoteGateway, API_PREFIX, listDriveRoots } = require('./remote-gateway.cjs')
+const { EventEmitter } = require('node:events')
+const { WebSocket } = require('ws')
+
+class FakeDesktopProvider extends EventEmitter {
+  constructor() {
+    super()
+    this.inputs = []
+    this.releaseCount = 0
+    this.frames = 0
+  }
+  isAvailable() { return true }
+  listDisplays() {
+    return [
+      { id: 'primary', name: '主屏', primary: true, width: 1920, height: 1080, scaleFactor: 1 },
+      { id: 'secondary', name: '副屏', primary: false, width: 1280, height: 1024, scaleFactor: 1.25 }
+    ]
+  }
+  async captureFrame(displayId) { this.frames += 1; return Buffer.from([0xFF, 0xD8, displayId.length, 0xFF, 0xD9]) }
+  dispatchInput(displayId, message) { this.inputs.push({ displayId, ...message }) }
+  ping() {}
+  releaseAll() { this.releaseCount += 1 }
+}
+
+function openDesktopSocket(url, headers) {
+  const messages = []
+  const waiters = []
+  const socket = new WebSocket(url, { headers })
+  socket.on('message', (data, isBinary) => {
+    const value = isBinary ? Buffer.from(data) : JSON.parse(data.toString('utf8'))
+    const item = { value, isBinary }
+    messages.push(item)
+    for (const waiter of [...waiters]) {
+      if (!waiter.predicate(item)) continue
+      waiters.splice(waiters.indexOf(waiter), 1)
+      clearTimeout(waiter.timer)
+      waiter.resolve(item)
+    }
+  })
+  const next = (predicate, timeoutMs = 4000) => {
+    const existing = messages.find(predicate)
+    if (existing) return Promise.resolve(existing)
+    return new Promise((resolve, reject) => {
+      const waiter = { predicate, resolve, timer: setTimeout(() => reject(new Error('Desktop WebSocket message timed out')), timeoutMs) }
+      waiters.push(waiter)
+    })
+  }
+  return { socket, next, messages }
+}
+
+function rejectedDesktopSocket(url, headers) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, { headers })
+    socket.once('unexpected-response', (_request, response) => { response.resume(); resolve(response.statusCode) })
+    socket.once('open', () => { socket.close(); reject(new Error('Desktop WebSocket unexpectedly opened')) })
+    socket.once('error', () => {})
+  })
+}
 
 async function listen(server) {
   await new Promise((resolve, reject) => {
@@ -50,6 +107,12 @@ function websocketHandshake(port, cookie) {
 }
 
 async function main() {
+  const roots = await listDriveRoots({
+    platform: 'win32',
+    timeoutMs: 25,
+    probe: root => root === 'F:\\' ? Promise.resolve() : root === 'Z:\\' ? new Promise(() => {}) : Promise.reject(new Error('missing'))
+  })
+  assert.deepEqual(roots, ['F:\\'])
   const upstream = http.createServer((request, response) => {
     if (String(request.headers.accept || '').includes('text/html')) {
       response.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -69,11 +132,13 @@ async function main() {
   })
   const upstreamPort = await listen(upstream)
   const temp = mkdtempSync(path.join(os.tmpdir(), 'dsh-remote-test-'))
+  const desktopProvider = new FakeDesktopProvider()
   const gateway = new RemoteGateway({
     userDataPath: temp,
     allowTestIdentity: true,
     skipTailscaleServe: true,
-    testRemoteUrl: 'https://desktop.test.ts.net:8443'
+    testRemoteUrl: 'https://desktop.test.ts.net:8443',
+    desktopProvider
   })
   await gateway.start(`http://127.0.0.1:${upstreamPort}`)
   const base = `http://127.0.0.1:${gateway.gatewayPort}`
@@ -113,6 +178,16 @@ async function main() {
       Origin: 'https://desktop.test.ts.net:8443',
       'X-DSH-Test-Identity': 'owner@example.com'
     }
+    const unauthorizedCapabilities = await fetch(`${base}${API_PREFIX}/desktop/capabilities`, { headers: { 'X-DSH-Test-Identity': 'owner@example.com' } })
+    assert.equal(unauthorizedCapabilities.status, 401)
+    const wrongOriginCapabilities = await fetch(`${base}${API_PREFIX}/desktop/capabilities`, { headers: { ...browserHeaders, Origin: 'https://attacker.example' } })
+    assert.equal(wrongOriginCapabilities.status, 403)
+    const capabilities = await fetch(`${base}${API_PREFIX}/desktop/capabilities`, { headers: browserHeaders })
+    assert.equal(capabilities.status, 200)
+    assert.deepEqual((await capabilities.json()).displays.map(display => display.id), ['primary', 'secondary'])
+    const drives = await fetch(`${base}${API_PREFIX}/drives`, { headers: browserHeaders })
+    assert.equal(drives.status, 200)
+    assert.ok(Array.isArray((await drives.json()).drives))
     const compatPage = await fetch(base, { headers: { ...browserHeaders, Accept: 'text/html' } })
     assert.equal(compatPage.status, 200)
     const compatHtml = await compatPage.text()
@@ -149,10 +224,63 @@ async function main() {
     assert.equal(upgradedHeaders.origin, `http://127.0.0.1:${upstreamPort}`)
     assert.equal(upgradedHeaders.cookie, undefined)
 
+    const desktopUrl = `ws://127.0.0.1:${gateway.gatewayPort}${API_PREFIX}/desktop/socket`
+    const wsHeaders = { Cookie: cookie, Origin: 'https://desktop.test.ts.net:8443', 'X-DSH-Test-Identity': 'owner@example.com' }
+    assert.equal(await rejectedDesktopSocket(desktopUrl, { ...wsHeaders, Origin: 'https://attacker.example' }), 401)
+    const first = openDesktopSocket(desktopUrl, wsHeaders)
+    await new Promise((resolve, reject) => { first.socket.once('open', resolve); first.socket.once('error', reject) })
+    const firstHello = (await first.next(item => !item.isBinary && item.value.type === 'hello')).value
+    assert.equal(firstHello.selectedDisplayId, 'primary')
+    assert.equal((await first.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)).value.canControl, true)
+    const frame = await first.next(item => item.isBinary)
+    assert.equal(frame.value[0], 0xFF)
+
+    const second = openDesktopSocket(desktopUrl, wsHeaders)
+    await new Promise((resolve, reject) => { second.socket.once('open', resolve); second.socket.once('error', reject) })
+    assert.equal((await second.next(item => !item.isBinary && item.value.type === 'control-state')).value.canControl, false)
+    second.socket.send(JSON.stringify({ type: 'pointer', action: 'click', button: 'left', x: 0.5, y: 0.5 }))
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(desktopProvider.inputs.length, 0)
+    first.socket.send(JSON.stringify({ type: 'pointer', action: 'click', button: 'left', x: 0.5, y: 0.5 }))
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(desktopProvider.inputs.length, 1)
+    assert.equal(desktopProvider.inputs[0].displayId, 'primary')
+    first.socket.send(JSON.stringify({ type: 'select-display', displayId: 'secondary' }))
+    await first.next(item => !item.isBinary && item.value.type === 'display-list' && item.value.selectedDisplayId === 'secondary')
+    first.socket.close()
+    assert.equal((await second.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)).value.canControl, true)
+    gateway.setDesktopLocked(true)
+    assert.equal((await second.next(item => !item.isBinary && item.value.type === 'stream-state' && item.value.state === 'paused')).value.reason, 'screen-locked')
+    assert.ok(desktopProvider.releaseCount >= 1)
+    gateway.setDesktopLocked(false)
+    second.socket.close()
+    await new Promise(resolve => second.socket.once('close', resolve))
+    const invalid = openDesktopSocket(desktopUrl, wsHeaders)
+    await new Promise((resolve, reject) => { invalid.socket.once('open', resolve); invalid.socket.once('error', reject) })
+    await invalid.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)
+    const invalidClosed = new Promise(resolve => invalid.socket.once('close', code => resolve(code)))
+    invalid.socket.send(JSON.stringify({ type: 'pointer', action: 'click', button: 'left', x: 2, y: 0.5 }))
+    assert.equal(await invalidClosed, 1008)
+    const recovery = openDesktopSocket(desktopUrl, wsHeaders)
+    await new Promise((resolve, reject) => { recovery.socket.once('open', resolve); recovery.socket.once('error', reject) })
+    await recovery.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)
+    desktopProvider.emit('input-error', new Error('simulated helper crash'))
+    await recovery.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.active === false)
+    assert.equal(gateway.getStatus().desktopControl.active, false)
+    recovery.socket.close()
+    await new Promise(resolve => recovery.socket.once('close', resolve))
+    const heartbeat = openDesktopSocket(desktopUrl, wsHeaders)
+    await new Promise((resolve, reject) => { heartbeat.socket.once('open', resolve); heartbeat.socket.once('error', reject) })
+    await heartbeat.next(item => !item.isBinary && item.value.type === 'hello')
+    const heartbeatClosed = new Promise(resolve => heartbeat.socket.once('close', code => resolve(code)))
+    for (const client of gateway.desktopClients) client.lastHeartbeat = 0
+    await gateway.captureDesktopTick()
+    assert.equal(await heartbeatClosed, 1001)
+
     gateway.revokeDevice(deviceId)
     const revoked = await fetch(base, { headers: { Cookie: cookie, Origin: 'https://desktop.test.ts.net:8443', 'X-DSH-Test-Identity': 'owner@example.com' } })
     assert.equal(revoked.status, 401)
-    console.log('remote-gateway-auth-proxy-test-ok')
+    console.log('remote-gateway-auth-proxy-desktop-test-ok')
   } finally {
     await gateway.stop(false)
     await new Promise((resolve) => upstream.close(resolve))

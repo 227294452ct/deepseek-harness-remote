@@ -51,6 +51,7 @@
       <h2>连接状态</h2>
       <div class="status"><span id="dot" class="dot"></span><div><div id="state" class="label">正在检查…</div><div id="url" class="detail"></div></div></div>
       <div id="tunnel" class="detail"></div>
+      <div id="desktopControl" class="pending"><div id="desktopControlText" class="label"></div><div class="actions"><button id="stopDesktopControl" class="danger">立即停止控制</button></div></div>
       <div class="actions">
         <button id="enable" class="primary">启用远程访问</button>
         <button id="disable">暂停远程访问</button>
@@ -84,6 +85,9 @@
     $('enable').disabled = connected
     $('disable').disabled = !connected
     $('pair').disabled = !connected
+    const desktopControl = status.desktopControl || { active: false }
+    $('desktopControl').classList.toggle('visible', desktopControl.active === true)
+    $('desktopControlText').textContent = desktopControl.active ? `${desktopControl.deviceName || '已配对手机'} 正在控制桌面` : ''
     const devices = status.devices || []
     $('devices').innerHTML = devices.length ? '' : '<div class="empty">尚未配对手机</div>'
     for (const device of devices) {
@@ -101,6 +105,7 @@
   $('enable').onclick = () => run(window.dshRemote.enable)
   $('disable').onclick = () => run(window.dshRemote.disable)
   $('pair').onclick = () => run(async () => { const pairing=await window.dshRemote.createPairing(); currentPairingId=pairing.pairingId; $('qrImage').src=pairing.qrDataUrl; $('code').textContent=pairing.verificationCode; $('qr').classList.add('visible'); $('pending').classList.remove('visible') })
+  $('stopDesktopControl').onclick = () => run(window.dshRemote.stopDesktopControl)
   $('approve').onclick = () => run(async () => { await window.dshRemote.approvePairing(currentPairingId); $('pending').classList.remove('visible') })
   window.dshRemote.onStatus(render)
   window.dshRemote.onPairing((pairing) => { if(pairing.pairingId!==currentPairingId)return; $('code').textContent=pairing.verificationCode; if(pairing.status==='pending'){ $('pendingText').textContent=`${pairing.deviceName} · ${pairing.tailscaleLogin}`; $('pending').classList.add('visible') } })

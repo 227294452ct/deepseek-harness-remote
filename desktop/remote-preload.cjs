@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('dshRemote', {
   createPairing: () => ipcRenderer.invoke('remote:create-pairing'),
   approvePairing: (pairingId) => ipcRenderer.invoke('remote:approve-pairing', pairingId),
   revokeDevice: (deviceId) => ipcRenderer.invoke('remote:revoke-device', deviceId),
+  stopDesktopControl: () => ipcRenderer.invoke('remote:stop-desktop-control'),
   onStatus: (listener) => {
     const wrapped = (_event, value) => listener(value)
     ipcRenderer.on('remote:status', wrapped)

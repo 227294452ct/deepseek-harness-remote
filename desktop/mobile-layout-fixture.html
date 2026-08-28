@@ -12,7 +12,9 @@
     .rail { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 24px 0; border-right: 1px solid #e5e7eb; background: #f8fafc; }
     .rail-mark { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #111827; color: #fff; font-weight: 800; }
     .rail-button { width: 40px; height: 40px; border: 0; border-radius: 12px; background: transparent; color: #111827; font-size: 22px; }
-    .rail .settings { margin-top: auto; }
+    .foot-area { flex: none; margin-top: auto; width: 100%; height: 54px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+    .settings-area { flex: none; width: 100%; height: 54px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; overflow: hidden; }
+    [data-slot="sidebar.settings"], [data-slot="conversation.composer.bar"] { display: contents; }
     .conversation { position: relative; min-width: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
     .session-header { flex: none; padding: 12px 20px 0; border-bottom: 1px solid #e5e7eb; background: rgba(255,255,255,.96); }
     .title-row { display: flex; align-items: center; min-height: 40px; }
@@ -45,6 +47,16 @@
     .actions { flex: none; display: flex; align-items: center; gap: 12px; }
     .actions button { min-width: 108px; height: 42px; padding: 0 16px; border-radius: 21px; border: 1px solid #d1d5db; background: #fff; white-space: nowrap; }
     .actions .primary { border-color: #111827; background: #111827; color: #fff; }
+    .composer-stack { flex: none; width: 100%; padding: 0 8px 10px; }
+    .composer-root { width: 100%; padding: 0 8px; }
+    .composer-card { width: 100%; padding: 12px; border: 1px solid #d9dde5; border-radius: 22px; background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.08); }
+    .composer-row { width: 100%; overflow: hidden; }
+    .composer-trailing { display: flex; align-items: center; gap: 7px; width: 100%; overflow: hidden; white-space: nowrap; }
+    .composer-trailing button { flex: none; height: 34px; border: 0; border-radius: 17px; background: #f1f5f9; }
+    .vision { width: 48px; }
+    .access { width: 42px; }
+    .model { min-width: 230px; max-width: none; padding: 0 14px; overflow: hidden; text-overflow: ellipsis; }
+    .send { width: 34px; background: #111827 !important; color: #fff; }
   </style>
   <script src="/compat.js" defer></script>
 </head>
@@ -55,7 +67,13 @@
       <button class="rail-button" aria-label="新会话">＋</button>
       <button class="rail-button" aria-label="工作区">□</button>
       <button class="rail-button" aria-label="搜索">⌕</button>
-      <button class="rail-button settings" aria-label="设置">⚙</button>
+      <div class="foot-area">
+        <div class="settings-area">
+          <div data-slot="sidebar.settings">
+            <button class="rail-button settings" aria-haspopup="dialog" aria-expanded="false">⚙</button>
+          </div>
+        </div>
+      </div>
     </aside>
     <main class="conversation">
       <header class="session-header">
@@ -77,6 +95,22 @@
         <div class="message">Let me ask a few clarifying questions so I build the right thing.</div>
         <div class="status">ⓘ 提问 · 等待回答</div>
         <div class="diving">Deep diving…</div>
+      </div>
+      <div class="composer-stack">
+        <div data-slot="conversation.composer.bar">
+          <div class="composer-root">
+            <div class="composer-card">
+              <div class="composer-row">
+                <div class="composer-trailing">
+                  <button class="vision" aria-label="识图">◉</button>
+                  <button class="access" aria-label="访问模式：ask">◇</button>
+                  <button class="model" aria-label="选择模型：DeepSeek-V4-Flash-Very-Long-Model-Name">DeepSeek-V4-Flash-Very-Long-Model-Name · High</button>
+                  <button class="send" aria-label="发送消息">➤</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="question-frame" data-question-key="portrait-layout-test">
     <section class="question-card">
