@@ -572,6 +572,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   }
 
   const installTouchControls = stage => {
+    const tapSlop = 20
     const active = new Map()
     let gesture = null
     let pendingMove = null
@@ -612,13 +613,22 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
         y: Math.max(0, Math.min(1, (touch.clientY - top) / height))
       }
     }
-    const pointer = (action, touch, button) => {
-      const value = mapped(touch)
-      if (value && desktopCanControl) sendDesktop({ type: 'pointer', action, button: button || 'left', x: value.x, y: value.y })
+    const pointerValue = (action, value, button) => {
+      if (!value) return false
+      if (!desktopCanControl) {
+        updateDesktopStatus(desktopControlStateReceived ? '已连接 · 当前仅可查看，无法发送输入' : '已连接 · 控制尚未就绪，请稍后重试')
+        return false
+      }
+      if (!desktopSocket || desktopSocket.readyState !== WebSocket.OPEN) {
+        updateDesktopStatus('连接中断 · 输入暂时不可用')
+        return false
+      }
+      sendDesktop({ type: 'pointer', action, button: button || 'left', x: value.x, y: value.y })
+      return true
     }
     const flushInput = () => {
       inputFrame = null
-      if (pendingMove) { const move = pendingMove; pendingMove = null; pointer('move', move, 'left') }
+      if (pendingMove) { const move = pendingMove; pendingMove = null; pointerValue('move', move, 'left') }
       if (pendingWheel) {
         const deltaY = pendingWheel
         pendingWheel = 0
@@ -634,11 +644,19 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       if (active.size === 1) {
         const touch = event.touches[0]
         const start = point(touch)
-        gesture = { kind: 'tap', id: touch.identifier, start, last: start, down: false, longTimer: setTimeout(() => {
-          if (gesture && gesture.kind === 'tap' && !gesture.down) { pointer('click', touch, 'right'); gesture.kind = 'long' }
+        const startMapped = mapped(touch)
+        gesture = { kind: 'tap', id: touch.identifier, start, last: start, startMapped, lastMapped: startMapped, maxDistance: 0, down: false, longTimer: setTimeout(() => {
+          if (gesture && gesture.kind === 'tap' && !gesture.down && gesture.maxDistance <= tapSlop) {
+            pointerValue('click', gesture.startMapped, 'right')
+            gesture.kind = 'long'
+          }
         }, 520) }
       } else if (active.size === 2) {
         if (gesture && gesture.longTimer) clearTimeout(gesture.longTimer)
+        if (gesture && gesture.down) {
+          if (inputFrame !== null) { cancelAnimationFrame(inputFrame); flushInput() }
+          pointerValue('up', gesture.lastMapped || gesture.startMapped, 'left')
+        }
         const touches = Array.from(event.touches).slice(0, 2)
         const mid = midpoint(touches)
         const rect = stage.getBoundingClientRect()
@@ -680,12 +698,15 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       if (!touch) return
       const now = point(touch)
       const distance = Math.hypot(now.x - gesture.start.x, now.y - gesture.start.y)
-      if (distance > 12 && gesture.kind === 'tap') {
+      gesture.maxDistance = Math.max(gesture.maxDistance, distance)
+      const currentMapped = mapped(touch)
+      if (currentMapped) gesture.lastMapped = currentMapped
+      if (gesture.maxDistance > tapSlop && gesture.kind === 'tap') {
         clearTimeout(gesture.longTimer)
-        pointer('down', { clientX: gesture.start.x, clientY: gesture.start.y }, 'left')
-        gesture.kind = 'drag'; gesture.down = true
+        gesture.down = pointerValue('down', gesture.startMapped, 'left')
+        gesture.kind = 'drag'
       }
-      if (gesture.kind === 'drag') { pendingMove = point(touch); scheduleInput() }
+      if (gesture.kind === 'drag' && gesture.down && currentMapped) { pendingMove = currentMapped; scheduleInput() }
       gesture.last = now
     }, { passive: false })
     stage.addEventListener('touchend', event => {
@@ -695,14 +716,20 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       if (!gesture || active.size > 0) return
       clearTimeout(gesture.longTimer)
       const touch = event.changedTouches[0]
+      const endMapped = touch ? mapped(touch) : null
+      if (endMapped) gesture.lastMapped = endMapped
       if (inputFrame !== null) { cancelAnimationFrame(inputFrame); flushInput() }
-      if (gesture.kind === 'drag') pointer('up', touch, 'left')
-      else if (gesture.kind === 'tap') pointer('click', touch, 'left')
+      if (gesture.kind === 'drag' && gesture.down) pointerValue('up', gesture.lastMapped || gesture.startMapped, 'left')
+      else if (gesture.kind === 'tap') pointerValue('click', gesture.startMapped, 'left')
       gesture = null
     }, { passive: false })
     stage.addEventListener('touchcancel', event => {
       if (inputFrame !== null) { cancelAnimationFrame(inputFrame); flushInput() }
-      if (gesture && gesture.down && event.changedTouches[0]) pointer('up', event.changedTouches[0], 'left')
+      if (gesture && gesture.down) {
+        const touch = event.changedTouches[0]
+        const cancelledMapped = touch ? mapped(touch) : null
+        pointerValue('up', cancelledMapped || gesture.lastMapped || gesture.startMapped, 'left')
+      }
       active.clear(); gesture = null
     }, { passive: false })
   }
@@ -1023,7 +1050,11 @@ class RemoteGateway extends EventEmitter {
     this.devices = this.loadDevices()
     this.desktopProvider?.on?.('input-error', error => {
       this.log(`Desktop input helper failed: ${error.stack || error.message}`)
+      const controller = this.desktopController
       this.stopDesktopControl('input-helper-failed')
+      if (controller?.ws.readyState === WebSocket.OPEN) {
+        this.sendDesktopJson(controller, { type: 'error', code: 'input-failed', message: '桌面输入暂时不可用，请重新进入远程桌面。' })
+      }
     })
     this.desktopProvider?.on?.('local-input', value => this.handleLocalDesktopInput(value))
   }

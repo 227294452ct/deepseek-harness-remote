@@ -101,6 +101,11 @@ public static class DshRemoteInput {
   static void Mouse(uint flags, uint data=0, int dx=0, int dy=0) { Send(new INPUT { type=0, U=new INPUTUNION { mi=new MOUSEINPUT { dx=dx, dy=dy, mouseData=data, flags=flags, extra=RemoteInputMarker } } }); }
   static uint DownFlag(string button) { return button == "right" ? 0x0008u : button == "middle" ? 0x0020u : 0x0002u; }
   static uint UpFlag(string button) { return button == "right" ? 0x0010u : button == "middle" ? 0x0040u : 0x0004u; }
+  static void Click(string button) {
+    Mouse(DownFlag(button)); DownButtons.Add(button);
+    try { Thread.Sleep(32); }
+    finally { Mouse(UpFlag(button)); DownButtons.Remove(button); }
+  }
   public static void Move(int x, int y) {
     SetThreadDpiAwarenessContext(PerMonitorAwareV2);
     int left=GetSystemMetrics(76), top=GetSystemMetrics(77), width=GetSystemMetrics(78), height=GetSystemMetrics(79);
@@ -110,8 +115,8 @@ public static class DshRemoteInput {
   public static void Button(string action, string button) {
     if (action == "down") { Mouse(DownFlag(button)); DownButtons.Add(button); }
     else if (action == "up") { Mouse(UpFlag(button)); DownButtons.Remove(button); }
-    else if (action == "click") { Mouse(DownFlag(button)); Mouse(UpFlag(button)); }
-    else if (action == "double-click") { Mouse(DownFlag(button)); Mouse(UpFlag(button)); Mouse(DownFlag(button)); Mouse(UpFlag(button)); }
+    else if (action == "click") { Click(button); }
+    else if (action == "double-click") { Click(button); Thread.Sleep(64); Click(button); }
   }
   public static void Wheel(int dx, int dy) { if (dy != 0) Mouse(0x0800u, unchecked((uint)dy)); if (dx != 0) Mouse(0x1000u, unchecked((uint)dx)); }
   static void Key(ushort vk, bool down) { Send(new INPUT { type=1, U=new INPUTUNION { ki=new KEYBDINPUT { vk=vk, flags=down ? 0u : 0x0002u, extra=RemoteInputMarker } } }); if (down) DownKeys.Add(vk); else DownKeys.Remove(vk); }
@@ -158,7 +163,12 @@ try {
       $continue = Invoke-CommandObject $command
       if ($continue -eq $false) { break }
     } catch {
-      [Console]::Error.WriteLine('invalid command')
+      [Console]::Out.WriteLine((@{
+        event = 'input-error'
+        type = [string]$command.type
+        action = [string]$command.action
+      } | ConvertTo-Json -Compress))
+      [Console]::Out.Flush()
     }
   }
 } finally {

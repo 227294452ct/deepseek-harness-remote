@@ -20,6 +20,8 @@ assert.match(source, /TimeSpan\.TicksPerMillisecond \* 800/, 'local input watch 
 assert.match(source, /RemoteInputMarker = new UIntPtr\(0x44534852u\)/, 'remote input needs an explicit identifying marker')
 assert.match(source, /!value\.extra\.Equals\(RemoteInputMarker\)/, 'local input hooks must ignore marked remote input')
 assert.match(source, /extra=RemoteInputMarker/, 'injected input must carry the remote marker')
+assert.match(source, /static void Click\(string button\)[\s\S]*Thread\.Sleep\(32\)/, 'remote clicks need a stable 32 ms press duration')
+assert.match(source, /event = 'input-error'[\s\S]*ConvertTo-Json -Compress/, 'input injection failures must be reported as structured events')
 assert.match(source, /SetThreadDpiAwarenessContext\(IntPtr context\)/, 'input helper must opt into a physical-pixel DPI context')
 assert.match(source, /PerMonitorAwareV2 = new IntPtr\(-4\)/, 'input helper must use per-monitor v2 DPI awareness')
 assert.match(source, /public static void Move\(int x, int y\) \{\s*SetThreadDpiAwarenessContext\(PerMonitorAwareV2\)/, 'pointer mapping must read virtual screen metrics in the physical-pixel DPI context')

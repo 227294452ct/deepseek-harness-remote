@@ -104,6 +104,60 @@ app.whenReady().then(async () => {
     assert.ok(tapMessage.receivedAt - tapStartedAt < 260, JSON.stringify(tapMessage))
     assert.ok(Math.abs(tapMessage.value.x - 0.5) < 0.02 && Math.abs(tapMessage.value.y - 0.1) < 0.02, JSON.stringify(tapMessage.value))
 
+    server.desktopMessages.length = 0
+    const jitterPoint = await window.webContents.executeJavaScript(`(() => {
+      const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const image=stage.querySelector('img'); const rect=stage.getBoundingClientRect();
+      const scale=Math.min(rect.width/image.naturalWidth,rect.height/image.naturalHeight); const shownWidth=image.naturalWidth*scale; const shownHeight=image.naturalHeight*scale; const left=rect.left+(rect.width-shownWidth)/2; const top=rect.top+(rect.height-shownHeight)/2;
+      const x=left+shownWidth*.45,y=top+shownHeight*.45; const touch=(id,tx,ty)=>new Touch({identifier:id,target:stage,clientX:tx,clientY:ty,pageX:tx,pageY:ty,screenX:tx,screenY:ty});
+      const start=touch(11,x,y),moved=touch(11,x+15,y+2);
+      stage.dispatchEvent(new TouchEvent('touchstart',{touches:[start],targetTouches:[start],changedTouches:[start],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchmove',{touches:[moved],targetTouches:[moved],changedTouches:[moved],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[moved],bubbles:true,cancelable:true}));
+      return {x:(x-left)/shownWidth,y:(y-top)/shownHeight};
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    const jitterPointers = server.desktopMessages.filter(item => item.value.type === 'pointer').map(item => item.value)
+    assert.deepEqual(jitterPointers.map(item => item.action), ['click'], JSON.stringify(jitterPointers))
+    assert.ok(Math.abs(jitterPointers[0].x - jitterPoint.x) < 0.01 && Math.abs(jitterPointers[0].y - jitterPoint.y) < 0.01, JSON.stringify({ jitterPointers, jitterPoint }))
+
+    server.desktopMessages.length = 0
+    await window.webContents.executeJavaScript(`(() => {
+      const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const image=stage.querySelector('img'); const rect=stage.getBoundingClientRect();
+      const scale=Math.min(rect.width/image.naturalWidth,rect.height/image.naturalHeight); const shownWidth=image.naturalWidth*scale; const shownHeight=image.naturalHeight*scale; const left=rect.left+(rect.width-shownWidth)/2; const top=rect.top+(rect.height-shownHeight)/2;
+      const x=left+shownWidth*.4,y=top+shownHeight*.5; const touch=(id,tx,ty)=>new Touch({identifier:id,target:stage,clientX:tx,clientY:ty,pageX:tx,pageY:ty,screenX:tx,screenY:ty});
+      const start=touch(21,x,y),moved=touch(21,x+36,y+3),outside=touch(21,left+shownWidth+40,y+3);
+      stage.dispatchEvent(new TouchEvent('touchstart',{touches:[start],targetTouches:[start],changedTouches:[start],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchmove',{touches:[moved],targetTouches:[moved],changedTouches:[moved],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchmove',{touches:[outside],targetTouches:[outside],changedTouches:[outside],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[outside],bubbles:true,cancelable:true}));
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    const dragPointers = server.desktopMessages.filter(item => item.value.type === 'pointer').map(item => item.value)
+    assert.deepEqual(dragPointers.map(item => item.action), ['down', 'move', 'up'], JSON.stringify(dragPointers))
+    assert.ok(Math.abs(dragPointers[1].x - dragPointers[2].x) < 0.001 && Math.abs(dragPointers[1].y - dragPointers[2].y) < 0.001, JSON.stringify(dragPointers))
+    assert.equal(await window.webContents.executeJavaScript(`Boolean(document.querySelector('[data-dsh-remote-desktop-viewer]'))`), true)
+
+    server.desktopMessages.length = 0
+    await window.webContents.executeJavaScript(`(() => {
+      const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const rect=stage.getBoundingClientRect(); const x=rect.left+rect.width*.45,y=rect.top+rect.height*.55; const touch=(id,tx,ty)=>new Touch({identifier:id,target:stage,clientX:tx,clientY:ty,pageX:tx,pageY:ty,screenX:tx,screenY:ty});
+      const start=touch(31,x,y),moved=touch(31,x+32,y),cancelled=touch(31,rect.right+30,y);
+      stage.dispatchEvent(new TouchEvent('touchstart',{touches:[start],targetTouches:[start],changedTouches:[start],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchmove',{touches:[moved],targetTouches:[moved],changedTouches:[moved],bubbles:true,cancelable:true}));
+      stage.dispatchEvent(new TouchEvent('touchcancel',{touches:[],targetTouches:[],changedTouches:[cancelled],bubbles:true,cancelable:true}));
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    const cancelPointers = server.desktopMessages.filter(item => item.value.type === 'pointer').map(item => item.value)
+    assert.deepEqual(cancelPointers.map(item => item.action), ['down', 'move', 'up'], JSON.stringify(cancelPointers))
+
+    server.desktopMessages.length = 0
+    await window.webContents.executeJavaScript(`(() => {
+      const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const rect=stage.getBoundingClientRect(); const x=rect.left+rect.width/2,y=rect.top+rect.height/2;
+      for(let id=41;id<=43;id+=1){const touch=new Touch({identifier:id,target:stage,clientX:x,clientY:y,pageX:x,pageY:y,screenX:x,screenY:y});stage.dispatchEvent(new TouchEvent('touchstart',{touches:[touch],targetTouches:[touch],changedTouches:[touch],bubbles:true,cancelable:true}));stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[touch],bubbles:true,cancelable:true}))}
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    const rapidPointers = server.desktopMessages.filter(item => item.value.type === 'pointer').map(item => item.value)
+    assert.deepEqual(rapidPointers.map(item => item.action), ['click', 'click', 'click'], JSON.stringify(rapidPointers))
+
     const zoomResult = await window.webContents.executeJavaScript(`(() => {
       const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const image=stage.querySelector('img'); const rect=stage.getBoundingClientRect(); const cx=rect.left+rect.width/2; const cy=rect.top+rect.height/2;
       const touch=(id,x)=>new Touch({identifier:id,target:stage,clientX:x,clientY:cy,pageX:x,pageY:cy,screenX:x,screenY:cy});
@@ -133,7 +187,7 @@ app.whenReady().then(async () => {
     assert.equal(landscapeViewer.objectFit, 'contain')
     assert.equal(landscapeViewer.keyboard, 'grid')
 
-    await window.webContents.executeJavaScript(`history.back()`)
+    await window.webContents.executeJavaScript(`document.querySelector('[data-action="back"]').click()`)
     await new Promise(resolve => setTimeout(resolve, 100))
     assert.equal(await window.webContents.executeJavaScript(`Boolean(document.querySelector('[data-dsh-remote-desktop-viewer]'))`), false)
 

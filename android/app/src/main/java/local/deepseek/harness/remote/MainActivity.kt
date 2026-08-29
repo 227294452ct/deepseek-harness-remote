@@ -81,6 +81,7 @@ class MainActivity : FragmentActivity() {
     private var stoppedAt = 0L
     private var biometricInFlight = false
     private var pendingDownload: DownloadSpec? = null
+    private var backDecisionPending = false
 
     private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
         result.contents?.let(::handlePairingUri)
@@ -118,10 +119,21 @@ class MainActivity : FragmentActivity() {
         configureWebView()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView.visibility == View.VISIBLE && webView.canGoBack()) webView.goBack()
-                else {
+                if (webView.visibility != View.VISIBLE) {
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
+                    return
+                }
+                if (backDecisionPending) return
+                backDecisionPending = true
+                webView.evaluateJavascript("Boolean(document.querySelector('[data-dsh-remote-desktop-viewer]'))") { result ->
+                    backDecisionPending = false
+                    if (result == "true") return@evaluateJavascript
+                    if (webView.canGoBack()) webView.goBack()
+                    else {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
                 }
             }
         })

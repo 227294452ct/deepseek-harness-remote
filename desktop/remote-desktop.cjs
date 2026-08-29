@@ -63,6 +63,7 @@ class WindowsInputHelper extends EventEmitter {
         let value
         try { value = JSON.parse(line) } catch { this.log(`Desktop input: ${line.trim()}`); continue }
         if (value?.event === 'local-input') this.emit('local-input', { kind: value.kind === 'keyboard' ? 'keyboard' : 'mouse' })
+        else if (value?.event === 'input-error') this.emit('command-error', new Error(`桌面输入注入失败（${value.type || 'unknown'}${value.action ? `/${value.action}` : ''}）。`))
         else this.log(`Desktop input: ${line.trim()}`)
       }
     })
@@ -110,6 +111,7 @@ class ElectronDesktopProvider extends EventEmitter {
       log: this.log
     })
     this.input.on('failure', error => this.emit('input-error', error))
+    this.input.on('command-error', error => this.emit('input-error', error))
     this.input.on('local-input', value => this.emit('local-input', value))
   }
 
