@@ -21,9 +21,9 @@ const PUBLIC_TUNNEL_IDENTITY = '内置安全隧道'
 const MOBILE_COMPAT_PATH = '/_dsh_remote/compat.js'
 const DESKTOP_SOCKET_PATH = `${API_PREFIX}/desktop/socket`
 const DESKTOP_MESSAGE_BYTES = 4 * 1024
-const DESKTOP_FRAME_INTERVAL_MS = Math.ceil(1000 / 6)
+const DESKTOP_FRAME_INTERVAL_MS = Math.ceil(1000 / 10)
 const DESKTOP_HEARTBEAT_TIMEOUT_MS = 15_000
-const DESKTOP_MAX_BUFFERED_BYTES = 1024 * 1024
+const DESKTOP_MAX_BUFFERED_BYTES = 192 * 1024
 const MOBILE_COMPAT_SCRIPT = `'use strict';
 (() => {
   if (typeof Object.hasOwn !== 'function') {
@@ -277,20 +277,24 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     '[data-dsh-remote-desktop-entry] span{display:none}',
     '[data-dsh-remote-desktop-entry][data-expanded="true"]{width:100%;justify-content:flex-start;padding:0 12px}',
     '[data-dsh-remote-desktop-entry][data-expanded="true"] span{display:inline}',
-    '[data-dsh-remote-desktop-viewer]{position:fixed;inset:0;z-index:2147483646;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#05080d;color:#f8fafc;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);font-family:system-ui,sans-serif;touch-action:none}',
-    '[data-dsh-remote-desktop-toolbar]{display:flex;align-items:center;gap:8px;min-height:54px;padding:7px 10px;background:#0d1521;border-bottom:1px solid #263243}',
+    '[data-dsh-remote-desktop-viewer]{position:fixed;inset:0;z-index:2147483646;box-sizing:border-box;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#05080d;color:#f8fafc;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);font-family:system-ui,sans-serif;touch-action:none}',
+    '[data-dsh-remote-desktop-viewer] *{box-sizing:border-box}',
+    '[data-dsh-remote-desktop-toolbar]{display:flex;align-items:center;gap:8px;min-width:0;min-height:54px;overflow:hidden;padding:7px 10px;background:#0d1521;border-bottom:1px solid #263243}',
     '[data-dsh-remote-desktop-toolbar] button,[data-dsh-remote-desktop-toolbar] select{height:38px;border:1px solid #344257;border-radius:10px;background:#152033;color:#f8fafc;padding:0 11px;font:600 13px inherit}',
+    '[data-dsh-remote-desktop-toolbar] button{flex:none}',
+    '[data-dsh-remote-desktop-toolbar] select{min-width:0;max-width:min(38vw,190px);text-overflow:ellipsis}',
     '[data-dsh-remote-desktop-status]{min-width:0;flex:1;font-size:12px;color:#a8bad0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '[data-dsh-remote-desktop-stage]{position:relative;min-width:0;min-height:0;display:grid;place-items:center;overflow:hidden;background:#000;touch-action:none;user-select:none}',
-    '[data-dsh-remote-desktop-stage] img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}',
+    '[data-dsh-remote-desktop-stage] img{display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important;object-position:center!important;transform-origin:center center!important;pointer-events:none}',
     '[data-dsh-remote-desktop-empty]{position:absolute;inset:0;display:grid;place-items:center;color:#94a3b8;font-size:14px;padding:30px;text-align:center;pointer-events:none}',
+    '[data-dsh-remote-desktop-notice]{position:fixed;left:50%;bottom:24px;z-index:2147483647;transform:translateX(-50%);max-width:min(88vw,520px);padding:12px 18px;border:1px solid #f87171;border-radius:12px;background:#7f1d1d;color:#fff;font:700 14px system-ui;box-shadow:0 12px 32px rgba(0,0,0,.38)}',
     '[data-dsh-remote-keyboard]{display:none;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:#0d1521;border-top:1px solid #263243}',
     '[data-dsh-remote-keyboard].open{display:grid;gap:8px}',
     '[data-dsh-remote-keyboard] textarea{width:100%;height:42px;resize:none;border:1px solid #344257;border-radius:10px;background:#101a2a;color:#fff;padding:9px 11px;font:16px system-ui}',
     '[data-dsh-remote-key-row]{display:flex;gap:6px;overflow-x:auto}',
     '[data-dsh-remote-key-row] button{flex:none;min-width:42px;height:38px;border:1px solid #344257;border-radius:9px;background:#18253a;color:#f8fafc;font:600 12px system-ui}',
     '[data-dsh-remote-key-row] button.active{background:#2563eb;border-color:#60a5fa}',
-    '@media(orientation:landscape) and (max-height:500px){[data-dsh-remote-desktop-toolbar]{min-height:46px;padding:4px 8px}[data-dsh-remote-desktop-toolbar] button,[data-dsh-remote-desktop-toolbar] select{height:34px}[data-dsh-remote-keyboard]{position:absolute;left:0;right:0;bottom:0;z-index:2;background:rgba(13,21,33,.97)}}'
+    '@media(orientation:landscape) and (max-height:500px){[data-dsh-remote-desktop-toolbar]{min-height:42px;padding:3px max(6px,env(safe-area-inset-right)) 3px max(6px,env(safe-area-inset-left))}[data-dsh-remote-desktop-toolbar] button,[data-dsh-remote-desktop-toolbar] select{height:34px}[data-dsh-remote-desktop-toolbar] select{max-width:min(30vw,180px)}[data-dsh-remote-keyboard]{position:absolute;left:0;right:0;bottom:0;z-index:2;max-height:calc(100% - 42px);overflow:auto;background:rgba(13,21,33,.97)}}'
   ].join('')
   ;(document.head || document.documentElement).appendChild(remoteStyle)
 
@@ -357,9 +361,16 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   let desktopReconnectTimer = null
   let desktopHeartbeat = null
   let desktopObjectUrl = null
+  let desktopFramePending = null
+  let desktopFrameRendering = false
+  let desktopViewportFrame = null
   let desktopDisplays = []
   let desktopSelectedId = ''
   let desktopCanControl = false
+  let desktopControlStateReceived = false
+  let desktopViewScale = 1
+  let desktopViewOffsetX = 0
+  let desktopViewOffsetY = 0
   const remoteMobileClient = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || (typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches)
 
   const desktopIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 4.8h16v11.4H4zM8.5 20h7M12 16.2V20"/></svg>'
@@ -367,6 +378,28 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   const updateDesktopStatus = (text) => {
     const node = desktopViewer && desktopViewer.querySelector('[data-dsh-remote-desktop-status]')
     if (node) node.textContent = text
+  }
+
+  const showDesktopExitNotice = text => {
+    document.querySelector('[data-dsh-remote-desktop-notice]')?.remove()
+    const notice = document.createElement('div')
+    notice.setAttribute('data-dsh-remote-desktop-notice', '')
+    notice.textContent = text
+    document.body.appendChild(notice)
+    setTimeout(() => notice.remove(), 5000)
+  }
+
+  const applyDesktopTransform = () => {
+    const image = desktopViewer && desktopViewer.querySelector('[data-dsh-remote-desktop-stage] img')
+    if (!image) return
+    image.style.setProperty('transform', 'translate(' + desktopViewOffsetX + 'px,' + desktopViewOffsetY + 'px) scale(' + desktopViewScale + ')', 'important')
+  }
+
+  const resetDesktopTransform = () => {
+    desktopViewScale = 1
+    desktopViewOffsetX = 0
+    desktopViewOffsetY = 0
+    applyDesktopTransform()
   }
 
   const sendDesktop = value => {
@@ -398,14 +431,73 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     }
   }
 
+  const renderDesktopFrame = () => {
+    if (desktopFrameRendering || !desktopFramePending || !desktopViewer) return
+    const image = desktopViewer.querySelector('img')
+    if (!image) return
+    const frame = desktopFramePending
+    desktopFramePending = null
+    desktopFrameRendering = true
+    const oldUrl = desktopObjectUrl
+    const nextUrl = URL.createObjectURL(frame)
+    desktopObjectUrl = nextUrl
+    const finish = () => {
+      image.onload = null
+      image.onerror = null
+      if (oldUrl) URL.revokeObjectURL(oldUrl)
+      desktopFrameRendering = false
+      if (desktopFramePending) requestAnimationFrame(renderDesktopFrame)
+    }
+    image.onload = finish
+    image.onerror = finish
+    image.src = nextUrl
+    const empty = desktopViewer.querySelector('[data-dsh-remote-desktop-empty]')
+    if (empty) empty.hidden = true
+  }
+
+  const queueDesktopFrame = frame => {
+    desktopFramePending = frame
+    renderDesktopFrame()
+  }
+
+  const syncDesktopViewport = () => {
+    desktopViewportFrame = null
+    if (!desktopViewer) return
+    const viewport = window.visualViewport
+    const width = Math.max(1, viewport ? viewport.width : document.documentElement.clientWidth)
+    const height = Math.max(1, viewport ? viewport.height : document.documentElement.clientHeight)
+    desktopViewer.style.left = (viewport ? viewport.offsetLeft : 0) + 'px'
+    desktopViewer.style.top = (viewport ? viewport.offsetTop : 0) + 'px'
+    desktopViewer.style.right = 'auto'
+    desktopViewer.style.bottom = 'auto'
+    desktopViewer.style.width = width + 'px'
+    desktopViewer.style.height = height + 'px'
+    applyDesktopTransform()
+  }
+
+  const scheduleDesktopViewportSync = () => {
+    if (desktopViewportFrame !== null) cancelAnimationFrame(desktopViewportFrame)
+    desktopViewportFrame = requestAnimationFrame(syncDesktopViewport)
+  }
+
   const teardownDesktopViewer = () => {
     closeDesktopSocket()
+    if (desktopViewportFrame !== null) cancelAnimationFrame(desktopViewportFrame)
+    desktopViewportFrame = null
+    const image = desktopViewer && desktopViewer.querySelector('img')
+    if (image) { image.onload = null; image.onerror = null }
     if (desktopObjectUrl) URL.revokeObjectURL(desktopObjectUrl)
     desktopObjectUrl = null
+    desktopFramePending = null
+    desktopFrameRendering = false
     desktopViewer && desktopViewer.remove()
     desktopViewer = null
     desktopDisplays = []
     desktopCanControl = false
+    desktopControlStateReceived = false
+    desktopViewScale = 1
+    desktopViewOffsetX = 0
+    desktopViewOffsetY = 0
   }
 
   const requestDesktopClose = () => {
@@ -429,14 +521,8 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     }
     socket.onmessage = event => {
       if (event.data instanceof Blob) {
-        const image = desktopViewer && desktopViewer.querySelector('img')
-        if (!image) return
-        const oldUrl = desktopObjectUrl
-        desktopObjectUrl = URL.createObjectURL(event.data)
-        image.onload = () => { if (oldUrl) URL.revokeObjectURL(oldUrl) }
-        image.src = desktopObjectUrl
-        const empty = desktopViewer.querySelector('[data-dsh-remote-desktop-empty]')
-        if (empty) empty.hidden = true
+        if (!desktopControlStateReceived) updateDesktopStatus('已连接 · 画面已就绪，正在获取控制权限…')
+        queueDesktopFrame(event.data)
         return
       }
       let value
@@ -448,17 +534,28 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
         renderDisplaySelect()
       }
       if (value.type === 'control-state') {
+        desktopControlStateReceived = true
         desktopCanControl = value.canControl === true
         updateDesktopStatus(desktopCanControl ? '已连接 · 你正在控制' : (value.active ? '已连接 · 仅查看，' + value.controller.deviceName + ' 正在控制' : '已连接 · 仅查看'))
       }
       if (value.type === 'stream-state' && value.state === 'paused') updateDesktopStatus(value.reason === 'screen-locked' ? '电脑已锁屏，画面已暂停' : '画面暂时不可用')
+      if (value.type === 'session-ended') {
+        const message = value.reason === 'local-input' ? '检测到电脑端操作，远程桌面已强制退出。' : '远程桌面会话已结束。'
+        teardownDesktopViewer()
+        showDesktopExitNotice(message)
+        return
+      }
       if (value.type === 'error') updateDesktopStatus(value.message || '远程桌面发生错误')
     }
     socket.onclose = event => {
       if (desktopSocket === socket) desktopSocket = null
       clearInterval(desktopHeartbeat)
       if (!desktopViewer) return
-      if (event.code === 1008 || event.code === 4401) { teardownDesktopViewer(); return }
+      if (event.code === 1008 || event.code === 4002 || event.code === 4401) {
+        teardownDesktopViewer()
+        if (event.code === 4002) showDesktopExitNotice('检测到电脑端操作，远程桌面已强制退出。')
+        return
+      }
       const retry = () => {
         if (!desktopViewer) return
         if (desktopReconnects >= 3) { updateDesktopStatus('连接已断开，请返回后重试'); return }
@@ -477,24 +574,59 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   const installTouchControls = stage => {
     const active = new Map()
     let gesture = null
-    let tapTimer = null
-    let lastTap = null
+    let pendingMove = null
+    let pendingWheel = 0
+    let inputFrame = null
     const point = touch => ({ x: touch.clientX, y: touch.clientY })
-    const mapped = touch => {
+    const midpoint = touches => ({ x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 })
+    const spacing = touches => Math.max(1, Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY))
+    const imageMetrics = () => {
       const display = desktopDisplays.find(item => item.id === desktopSelectedId)
       if (!display) return null
       const rect = stage.getBoundingClientRect()
-      const scale = Math.min(rect.width / display.width, rect.height / display.height)
-      const width = display.width * scale
-      const height = display.height * scale
-      const left = rect.left + (rect.width - width) / 2
-      const top = rect.top + (rect.height - height) / 2
-      if (touch.clientX < left || touch.clientX > left + width || touch.clientY < top || touch.clientY > top + height) return null
-      return { x: (touch.clientX - left) / width, y: (touch.clientY - top) / height }
+      const image = stage.querySelector('img')
+      const sourceWidth = image && image.naturalWidth > 0 ? image.naturalWidth : display.width
+      const sourceHeight = image && image.naturalHeight > 0 ? image.naturalHeight : display.height
+      const fitScale = Math.min(rect.width / sourceWidth, rect.height / sourceHeight)
+      const width = sourceWidth * fitScale * desktopViewScale
+      const height = sourceHeight * fitScale * desktopViewScale
+      return { rect, width, height, left: rect.left + (rect.width - width) / 2 + desktopViewOffsetX, top: rect.top + (rect.height - height) / 2 + desktopViewOffsetY }
+    }
+    const clampDesktopOffset = () => {
+      const metrics = imageMetrics()
+      if (!metrics) return
+      const visibleEdge = 36
+      const maxX = Math.max(0, (metrics.width + metrics.rect.width) / 2 - visibleEdge)
+      const maxY = Math.max(0, (metrics.height + metrics.rect.height) / 2 - visibleEdge)
+      desktopViewOffsetX = Math.max(-maxX, Math.min(maxX, desktopViewOffsetX))
+      desktopViewOffsetY = Math.max(-maxY, Math.min(maxY, desktopViewOffsetY))
+    }
+    const mapped = touch => {
+      const metrics = imageMetrics()
+      if (!metrics) return null
+      const { left, top, width, height } = metrics
+      const tolerance = 2
+      if (touch.clientX < left - tolerance || touch.clientX > left + width + tolerance || touch.clientY < top - tolerance || touch.clientY > top + height + tolerance) return null
+      return {
+        x: Math.max(0, Math.min(1, (touch.clientX - left) / width)),
+        y: Math.max(0, Math.min(1, (touch.clientY - top) / height))
+      }
     }
     const pointer = (action, touch, button) => {
       const value = mapped(touch)
       if (value && desktopCanControl) sendDesktop({ type: 'pointer', action, button: button || 'left', x: value.x, y: value.y })
+    }
+    const flushInput = () => {
+      inputFrame = null
+      if (pendingMove) { const move = pendingMove; pendingMove = null; pointer('move', move, 'left') }
+      if (pendingWheel) {
+        const deltaY = pendingWheel
+        pendingWheel = 0
+        if (desktopCanControl) sendDesktop({ type: 'wheel', deltaX: 0, deltaY })
+      }
+    }
+    const scheduleInput = () => {
+      if (inputFrame === null) inputFrame = requestAnimationFrame(flushInput)
     }
     stage.addEventListener('touchstart', event => {
       event.preventDefault()
@@ -507,51 +639,69 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
         }, 520) }
       } else if (active.size === 2) {
         if (gesture && gesture.longTimer) clearTimeout(gesture.longTimer)
-        const ys = Array.from(event.touches).map(touch => touch.clientY)
-        gesture = { kind: 'scroll', lastY: (ys[0] + ys[1]) / 2 }
+        const touches = Array.from(event.touches).slice(0, 2)
+        const mid = midpoint(touches)
+        const rect = stage.getBoundingClientRect()
+        gesture = {
+          kind: 'two', mode: null, startDistance: spacing(touches), startMid: mid, lastMid: mid,
+          startScale: desktopViewScale, startOffsetX: desktopViewOffsetX, startOffsetY: desktopViewOffsetY,
+          anchorX: mid.x - (rect.left + rect.width / 2 + desktopViewOffsetX),
+          anchorY: mid.y - (rect.top + rect.height / 2 + desktopViewOffsetY)
+        }
       }
     }, { passive: false })
     stage.addEventListener('touchmove', event => {
       event.preventDefault()
       if (!gesture) return
-      if (gesture.kind === 'scroll' && event.touches.length >= 2) {
-        const y = (event.touches[0].clientY + event.touches[1].clientY) / 2
-        const delta = Math.max(-1200, Math.min(1200, Math.round((gesture.lastY - y) * 6)))
-        if (desktopCanControl && delta) sendDesktop({ type: 'wheel', deltaX: 0, deltaY: delta })
-        gesture.lastY = y
+      if (gesture.kind === 'two' && event.touches.length >= 2) {
+        const touches = Array.from(event.touches).slice(0, 2)
+        const mid = midpoint(touches)
+        const distanceRatio = spacing(touches) / gesture.startDistance
+        if (!gesture.mode) {
+          if (Math.abs(distanceRatio - 1) > 0.04 || desktopViewScale !== 1 && Math.hypot(mid.x - gesture.startMid.x, mid.y - gesture.startMid.y) > 4) gesture.mode = 'zoom'
+          else if (desktopViewScale === 1 && Math.abs(mid.y - gesture.startMid.y) > 8) gesture.mode = 'scroll'
+        }
+        if (gesture.mode === 'scroll') {
+          const delta = Math.max(-1200, Math.min(1200, Math.round((gesture.lastMid.y - mid.y) * 6)))
+          if (delta) { pendingWheel = Math.max(-1200, Math.min(1200, pendingWheel + delta)); scheduleInput() }
+        } else if (gesture.mode === 'zoom') {
+          desktopViewScale = Math.max(0.35, Math.min(4, gesture.startScale * distanceRatio))
+          const scaleRatio = desktopViewScale / gesture.startScale
+          const rect = stage.getBoundingClientRect()
+          desktopViewOffsetX = mid.x - (rect.left + rect.width / 2) - gesture.anchorX * scaleRatio
+          desktopViewOffsetY = mid.y - (rect.top + rect.height / 2) - gesture.anchorY * scaleRatio
+          clampDesktopOffset()
+          applyDesktopTransform()
+        }
+        gesture.lastMid = mid
         return
       }
       const touch = Array.from(event.touches).find(item => item.identifier === gesture.id)
       if (!touch) return
       const now = point(touch)
       const distance = Math.hypot(now.x - gesture.start.x, now.y - gesture.start.y)
-      if (distance > 8 && gesture.kind === 'tap') {
+      if (distance > 12 && gesture.kind === 'tap') {
         clearTimeout(gesture.longTimer)
         pointer('down', { clientX: gesture.start.x, clientY: gesture.start.y }, 'left')
         gesture.kind = 'drag'; gesture.down = true
       }
-      if (gesture.kind === 'drag') pointer('move', touch, 'left')
+      if (gesture.kind === 'drag') { pendingMove = point(touch); scheduleInput() }
       gesture.last = now
     }, { passive: false })
     stage.addEventListener('touchend', event => {
       event.preventDefault()
       Array.from(event.changedTouches).forEach(touch => active.delete(touch.identifier))
+      if (gesture && gesture.kind === 'two') { gesture = null; return }
       if (!gesture || active.size > 0) return
       clearTimeout(gesture.longTimer)
       const touch = event.changedTouches[0]
+      if (inputFrame !== null) { cancelAnimationFrame(inputFrame); flushInput() }
       if (gesture.kind === 'drag') pointer('up', touch, 'left')
-      else if (gesture.kind === 'tap') {
-        const now = point(touch)
-        if (lastTap && Date.now() - lastTap.time < 300 && Math.hypot(now.x - lastTap.x, now.y - lastTap.y) < 24) {
-          clearTimeout(tapTimer); lastTap = null; pointer('double-click', touch, 'left')
-        } else {
-          lastTap = { time: Date.now(), x: now.x, y: now.y }
-          tapTimer = setTimeout(() => { if (lastTap) pointer('click', touch, 'left'); lastTap = null }, 280)
-        }
-      }
+      else if (gesture.kind === 'tap') pointer('click', touch, 'left')
       gesture = null
     }, { passive: false })
     stage.addEventListener('touchcancel', event => {
+      if (inputFrame !== null) { cancelAnimationFrame(inputFrame); flushInput() }
       if (gesture && gesture.down && event.changedTouches[0]) pointer('up', event.changedTouches[0], 'left')
       active.clear(); gesture = null
     }, { passive: false })
@@ -598,10 +748,13 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     history.pushState({ dshRemoteDesktop: true }, '', location.href)
     const viewer = document.createElement('div')
     viewer.setAttribute('data-dsh-remote-desktop-viewer', '')
-    viewer.innerHTML = '<div data-dsh-remote-desktop-toolbar><button type="button" data-action="back" aria-label="返回">← 返回</button><span data-dsh-remote-desktop-status>正在连接…</span><select aria-label="选择显示器"></select><button type="button" data-action="keyboard" aria-label="键盘">⌨ 键盘</button></div><div data-dsh-remote-desktop-stage><img alt="远程桌面画面"><div data-dsh-remote-desktop-empty>正在等待桌面画面…</div></div><div data-dsh-remote-keyboard><textarea inputmode="text" enterkeyhint="done" aria-label="远程输入" placeholder="在此输入中文或英文"></textarea><div data-dsh-remote-key-row><button data-key="Enter">Enter</button><button data-key="Escape">Esc</button><button data-key="Tab">Tab</button><button data-key="Backspace">⌫</button><button data-key="ArrowLeft">←</button><button data-key="ArrowUp">↑</button><button data-key="ArrowDown">↓</button><button data-key="ArrowRight">→</button></div><div data-dsh-remote-key-row><button data-modifier="Control">Ctrl</button><button data-modifier="Alt">Alt</button><button data-modifier="Shift">Shift</button><button data-key="A">A</button><button data-key="C">C</button><button data-key="V">V</button><button data-key="X">X</button><button data-key="Z">Z</button><button data-key="Y">Y</button></div></div>'
+    viewer.innerHTML = '<div data-dsh-remote-desktop-toolbar><button type="button" data-action="back" aria-label="返回">← 返回</button><span data-dsh-remote-desktop-status>正在连接…</span><select aria-label="选择显示器"></select><button type="button" data-action="fit" aria-label="适应画面">适应</button><button type="button" data-action="keyboard" aria-label="键盘">⌨ 键盘</button></div><div data-dsh-remote-desktop-stage><img alt="远程桌面画面"><div data-dsh-remote-desktop-empty>正在等待桌面画面…</div></div><div data-dsh-remote-keyboard><textarea inputmode="text" enterkeyhint="done" aria-label="远程输入" placeholder="在此输入中文或英文"></textarea><div data-dsh-remote-key-row><button data-key="Enter">Enter</button><button data-key="Escape">Esc</button><button data-key="Tab">Tab</button><button data-key="Backspace">⌫</button><button data-key="ArrowLeft">←</button><button data-key="ArrowUp">↑</button><button data-key="ArrowDown">↓</button><button data-key="ArrowRight">→</button></div><div data-dsh-remote-key-row><button data-modifier="Control">Ctrl</button><button data-modifier="Alt">Alt</button><button data-modifier="Shift">Shift</button><button data-key="A">A</button><button data-key="C">C</button><button data-key="V">V</button><button data-key="X">X</button><button data-key="Z">Z</button><button data-key="Y">Y</button></div></div>'
     document.body.appendChild(viewer)
     desktopViewer = viewer
+    resetDesktopTransform()
+    syncDesktopViewport()
     viewer.querySelector('[data-action="back"]').addEventListener('click', requestDesktopClose)
+    viewer.querySelector('[data-action="fit"]').addEventListener('click', resetDesktopTransform)
     viewer.querySelector('[data-action="keyboard"]').addEventListener('click', () => {
       const panel = viewer.querySelector('[data-dsh-remote-keyboard]')
       panel.classList.toggle('open')
@@ -609,6 +762,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     })
     viewer.querySelector('select').addEventListener('change', event => {
       desktopSelectedId = event.target.value
+      resetDesktopTransform()
       sendDesktop({ type: 'select-display', displayId: desktopSelectedId })
     })
     installTouchControls(viewer.querySelector('[data-dsh-remote-desktop-stage]'))
@@ -715,7 +869,12 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   }
 
   addEventListener('popstate', () => { if (desktopViewer && !(history.state && history.state.dshRemoteDesktop)) teardownDesktopViewer() })
-  addEventListener('resize', installDesktopEntry)
+  addEventListener('resize', () => { installDesktopEntry(); scheduleDesktopViewportSync() })
+  addEventListener('orientationchange', () => { scheduleDesktopViewportSync(); setTimeout(scheduleDesktopViewportSync, 250) })
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleDesktopViewportSync)
+    window.visualViewport.addEventListener('scroll', scheduleDesktopViewportSync)
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleRemoteDesktopFeatures, { once: true })
   else scheduleRemoteDesktopFeatures()
   new MutationObserver(scheduleRemoteDesktopFeatures).observe(document.documentElement, { childList: true, subtree: true })
@@ -859,12 +1018,14 @@ class RemoteGateway extends EventEmitter {
     this.desktopCaptureTimer = null
     this.desktopCaptureBusy = false
     this.desktopLocked = false
+    this.desktopEndingForLocalInput = false
     this.devicesPath = path.join(this.userDataPath, 'remote-devices.json')
     this.devices = this.loadDevices()
     this.desktopProvider?.on?.('input-error', error => {
       this.log(`Desktop input helper failed: ${error.stack || error.message}`)
       this.stopDesktopControl('input-helper-failed')
     })
+    this.desktopProvider?.on?.('local-input', value => this.handleLocalDesktopInput(value))
   }
 
   loadDevices() {
@@ -1106,6 +1267,23 @@ class RemoteGateway extends EventEmitter {
     return true
   }
 
+  handleLocalDesktopInput(value) {
+    if (this.desktopClients.size === 0 || this.desktopEndingForLocalInput) return
+    this.desktopEndingForLocalInput = true
+    this.log(`Local ${value?.kind === 'keyboard' ? 'keyboard' : 'mouse'} input detected; ending remote desktop session`)
+    if (!this.stopDesktopControl('local-input', false)) {
+      try { this.desktopProvider?.releaseAll?.() } catch (error) { this.log(`Desktop input release failed: ${error.message}`) }
+    }
+    this.stopDesktopCapture()
+    for (const client of [...this.desktopClients]) {
+      if (client.ws.readyState !== WebSocket.OPEN) continue
+      client.ws.send(JSON.stringify({ type: 'session-ended', reason: 'local-input' }), () => {
+        try { client.ws.close(4002, 'local input') } catch {}
+      })
+    }
+    this.emit('status', this.getStatus())
+  }
+
   setDesktopLocked(locked) {
     const next = locked === true
     if (next === this.desktopLocked) return
@@ -1121,15 +1299,19 @@ class RemoteGateway extends EventEmitter {
     const selected = displays.find(display => display.primary) || displays[0] || null
     const client = { ws, auth, selectedDisplayId: selected?.id || '', lastHeartbeat: Date.now(), controlReason: '', rateWindow: Date.now(), rateCount: 0 }
     this.desktopClients.add(client)
+    this.desktopEndingForLocalInput = false
     let sockets = this.deviceSockets.get(auth.device.id)
     if (!sockets) this.deviceSockets.set(auth.device.id, sockets = new Set())
     if (ws._socket) sockets.add(ws._socket)
+    try { this.desktopProvider?.prepare?.() } catch (error) {
+      this.log(`Desktop input preparation failed: ${error.stack || error.message}`)
+    }
 
     this.sendDesktopJson(client, {
       type: 'hello',
       version: 1,
       maxFrameEdge: 1280,
-      maxFps: 6,
+      maxFps: 10,
       selectedDisplayId: client.selectedDisplayId,
       desktopAvailable: this.desktopProvider?.isAvailable?.() === true,
       locked: this.desktopLocked
@@ -1146,7 +1328,10 @@ class RemoteGateway extends EventEmitter {
       if (ws._socket) sockets.delete(ws._socket)
       if (sockets.size === 0) this.deviceSockets.delete(auth.device.id)
       if (this.desktopController === client) this.stopDesktopControl('controller-disconnected', true)
-      if (this.desktopClients.size === 0) this.stopDesktopCapture()
+      if (this.desktopClients.size === 0) {
+        this.stopDesktopCapture()
+        this.desktopEndingForLocalInput = false
+      }
       this.emit('status', this.getStatus())
     })
     ws.on('error', error => this.log(`Desktop WebSocket error: ${error.message}`))
@@ -1175,6 +1360,7 @@ class RemoteGateway extends EventEmitter {
     }
     if (message.type === 'heartbeat') {
       client.lastHeartbeat = now
+      this.sendDesktopJson(client, this.desktopControlView(client))
       if (this.desktopController === client) this.desktopProvider?.ping?.()
       return
     }
@@ -1422,7 +1608,7 @@ class RemoteGateway extends EventEmitter {
           locked: this.desktopLocked,
           supportsControl: this.desktopProvider?.isAvailable?.() === true,
           maxFrameEdge: 1280,
-          maxFps: 6,
+          maxFps: 10,
           displays
         })
       }

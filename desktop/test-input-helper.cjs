@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { readFileSync } = require('node:fs')
 const path = require('node:path')
 const { spawn } = require('node:child_process')
 
@@ -11,6 +12,18 @@ if (process.platform !== 'win32') {
 
 const executable = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 const script = path.join(__dirname, 'windows-input-helper.ps1')
+const source = readFileSync(script, 'utf8')
+assert.match(source, /IsPhysicalMouseAction\(wParam\)/, 'mouse hook must filter passive mouse movement')
+assert.match(source, /value == 0x0201L[\s\S]*value == 0x020EL/, 'mouse hook must watch clicks and wheel actions')
+assert.match(source, /IsPhysicalKeyboardAction\(wParam\)/, 'keyboard hook must filter key-up events')
+assert.match(source, /TimeSpan\.TicksPerMillisecond \* 800/, 'local input watch needs a startup grace period')
+assert.match(source, /RemoteInputMarker = new UIntPtr\(0x44534852u\)/, 'remote input needs an explicit identifying marker')
+assert.match(source, /!value\.extra\.Equals\(RemoteInputMarker\)/, 'local input hooks must ignore marked remote input')
+assert.match(source, /extra=RemoteInputMarker/, 'injected input must carry the remote marker')
+assert.match(source, /SetThreadDpiAwarenessContext\(IntPtr context\)/, 'input helper must opt into a physical-pixel DPI context')
+assert.match(source, /PerMonitorAwareV2 = new IntPtr\(-4\)/, 'input helper must use per-monitor v2 DPI awareness')
+assert.match(source, /public static void Move\(int x, int y\) \{\s*SetThreadDpiAwarenessContext\(PerMonitorAwareV2\)/, 'pointer mapping must read virtual screen metrics in the physical-pixel DPI context')
+assert.match(source, /ConfigureDpiAwareness\(\); \[DshRemoteInput\]::StartLocalInputWatch\(\)/, 'DPI awareness must be configured before the input watcher starts')
 const child = spawn(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-DryRun'], {
   windowsHide: true,
   shell: false,

@@ -1,4 +1,33 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:"Microsoft YaHei UI",system-ui,sans-serif;background:transparent;color:#fff}main{height:100%;display:flex;align-items:center;gap:10px;padding:8px 10px 8px 14px;border:1px solid rgba(147,197,253,.38);border-radius:13px;background:rgba(10,22,39,.96);box-shadow:0 10px 30px rgba(0,0,0,.35)}.dot{width:9px;height:9px;flex:none;border-radius:50%;background:#4ade80;box-shadow:0 0 0 5px rgba(74,222,128,.13)}.text{min-width:0;flex:1}.title{font-size:12px;font-weight:700}.device{margin-top:2px;color:#a8bad0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}button{height:32px;flex:none;border:1px solid rgba(248,113,113,.35);border-radius:9px;background:rgba(127,29,29,.5);color:#fecaca;padding:0 11px;font:700 11px inherit;cursor:pointer}
-</style></head><body><main><span class="dot"></span><div class="text"><div class="title">手机正在控制桌面</div><div id="device" class="device"></div></div><button id="stop">立即停止</button></main><script>window.dshDesktopControl.onState(state=>{document.getElementById('device').textContent=state.deviceName||'已配对设备'});document.getElementById('stop').onclick=()=>window.dshDesktopControl.stop()</script></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>远程控制保护</title>
+  <style>
+    :root{color-scheme:dark;font-family:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI",system-ui,sans-serif}
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#030914;color:#f7f9fc}
+    body{position:relative;background-image:url("control-indicator-background.png");background-position:center;background-size:cover;background-repeat:no-repeat;text-rendering:geometricPrecision;-webkit-font-smoothing:antialiased}
+    main{position:absolute;left:50%;top:50%;width:min(960px,92vw);transform:translate(-50%,-53%);text-align:center}
+    h1{margin:0;font-size:clamp(46px,4.25vw,76px);font-weight:750;line-height:1.38;letter-spacing:.015em;text-shadow:0 2px 16px rgba(0,0,0,.24)}
+    h1 span{display:block;white-space:nowrap}
+    .accent{width:clamp(86px,7vw,126px);height:3px;margin:30px auto 43px;background:#5d9ef3;box-shadow:0 0 10px rgba(69,139,235,.36)}
+    .device{display:flex;align-items:center;justify-content:center;gap:12px;color:#a9c3e5;font-size:clamp(19px,1.65vw,29px);font-weight:400;line-height:1.4;white-space:nowrap}
+    .status-dot{flex:none;width:clamp(12px,1.05vw,18px);height:clamp(12px,1.05vw,18px);border-radius:50%;background:#00dc6a;box-shadow:0 0 9px rgba(0,220,106,.26)}
+    .notice{position:fixed;left:50%;bottom:9.7%;width:min(860px,88vw);transform:translateX(-50%);margin:0;text-align:center;color:#89a8cf;font-size:clamp(16px,1.32vw,24px);font-weight:400;line-height:1.5;white-space:nowrap}
+    @media (max-height:620px){main{transform:translate(-50%,-51%)}h1{font-size:clamp(36px,7vh,54px);line-height:1.28}.accent{margin:18px auto 24px}.notice{bottom:5.5%;font-size:15px}}
+    @media (max-width:720px){h1{font-size:clamp(34px,8.5vw,50px)}.device{font-size:17px}.notice{font-size:14px;white-space:normal}}
+  </style>
+</head>
+<body>
+  <main>
+    <h1><span>正在远程控制</span><span>请勿操作此电脑</span></h1>
+    <div class="accent" aria-hidden="true"></div>
+    <div class="device"><span class="status-dot" aria-hidden="true"></span><span id="device">已配对设备 正在安全查看</span></div>
+  </main>
+  <p class="notice">本机点击、滚轮或按键将立即结束会话</p>
+  <script>{const node=document.getElementById('device');const preview=new URLSearchParams(location.search).get('device');if(preview)node.textContent=preview+' 正在安全查看';window.dshDesktopControl?.onState(state=>{node.textContent=(state.deviceName||'已配对设备')+' 正在安全查看'})}</script>
+</body>
+</html>

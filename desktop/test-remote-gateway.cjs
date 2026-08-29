@@ -18,6 +18,7 @@ class FakeDesktopProvider extends EventEmitter {
     this.inputs = []
     this.releaseCount = 0
     this.frames = 0
+    this.prepareCount = 0
   }
   isAvailable() { return true }
   listDisplays() {
@@ -28,6 +29,7 @@ class FakeDesktopProvider extends EventEmitter {
   }
   async captureFrame(displayId) { this.frames += 1; return Buffer.from([0xFF, 0xD8, displayId.length, 0xFF, 0xD9]) }
   dispatchInput(displayId, message) { this.inputs.push({ displayId, ...message }) }
+  prepare() { this.prepareCount += 1 }
   ping() {}
   releaseAll() { this.releaseCount += 1 }
 }
@@ -184,7 +186,9 @@ async function main() {
     assert.equal(wrongOriginCapabilities.status, 403)
     const capabilities = await fetch(`${base}${API_PREFIX}/desktop/capabilities`, { headers: browserHeaders })
     assert.equal(capabilities.status, 200)
-    assert.deepEqual((await capabilities.json()).displays.map(display => display.id), ['primary', 'secondary'])
+    const capabilityValue = await capabilities.json()
+    assert.deepEqual(capabilityValue.displays.map(display => display.id), ['primary', 'secondary'])
+    assert.equal(capabilityValue.maxFps, 10)
     const drives = await fetch(`${base}${API_PREFIX}/drives`, { headers: browserHeaders })
     assert.equal(drives.status, 200)
     assert.ok(Array.isArray((await drives.json()).drives))
@@ -205,6 +209,12 @@ async function main() {
     assert.match(compatSource, /grid-template-columns: repeat\(2/)
     assert.match(compatSource, /orientation: portrait/)
     assert.match(compatSource, /data-dsh-remote-session-log/)
+    assert.match(compatSource, /visualViewport/)
+    assert.match(compatSource, /box-sizing:border-box/)
+    assert.match(compatSource, /image\.naturalWidth/)
+    assert.match(compatSource, /height:100%!important/)
+    assert.match(compatSource, /desktopViewScale = Math\.max\(0\.35/)
+    assert.doesNotMatch(compatSource, /tapTimer/)
     assert.doesNotThrow(() => new vm.Script(compatSource))
 
     const proxied = await fetch(base, { headers: {
@@ -231,7 +241,11 @@ async function main() {
     await new Promise((resolve, reject) => { first.socket.once('open', resolve); first.socket.once('error', reject) })
     const firstHello = (await first.next(item => !item.isBinary && item.value.type === 'hello')).value
     assert.equal(firstHello.selectedDisplayId, 'primary')
+    assert.equal(firstHello.maxFps, 10)
+    assert.equal(desktopProvider.prepareCount, 1)
     assert.equal((await first.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)).value.canControl, true)
+    first.socket.send(JSON.stringify({ type: 'heartbeat' }))
+    assert.equal((await first.next(item => !item.isBinary && item.value.type === 'control-state')).value.canControl, true)
     const frame = await first.next(item => item.isBinary)
     assert.equal(frame.value[0], 0xFF)
 
@@ -255,6 +269,15 @@ async function main() {
     gateway.setDesktopLocked(false)
     second.socket.close()
     await new Promise(resolve => second.socket.once('close', resolve))
+    const localInput = openDesktopSocket(desktopUrl, wsHeaders)
+    await new Promise((resolve, reject) => { localInput.socket.once('open', resolve); localInput.socket.once('error', reject) })
+    await localInput.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)
+    const localInputClosed = new Promise(resolve => localInput.socket.once('close', code => resolve(code)))
+    desktopProvider.emit('local-input', { kind: 'mouse' })
+    desktopProvider.emit('local-input', { kind: 'mouse' })
+    assert.equal((await localInput.next(item => !item.isBinary && item.value.type === 'session-ended')).value.reason, 'local-input')
+    assert.equal(await localInputClosed, 4002)
+    assert.equal(gateway.getStatus().desktop.viewerCount, 0)
     const invalid = openDesktopSocket(desktopUrl, wsHeaders)
     await new Promise((resolve, reject) => { invalid.socket.once('open', resolve); invalid.socket.once('error', reject) })
     await invalid.next(item => !item.isBinary && item.value.type === 'control-state' && item.value.canControl)

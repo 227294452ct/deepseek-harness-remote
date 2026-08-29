@@ -33,6 +33,7 @@ function createMobileLayoutFixtureServer() {
     })
     response.end(fixture)
   })
+  server.desktopMessages = []
   const wss = new WebSocketServer({ noServer: true })
   server.on('upgrade', (request, socket, head) => {
     if (request.url !== '/_dsh_remote/v1/desktop/socket') { socket.destroy(); return }
@@ -47,6 +48,7 @@ function createMobileLayoutFixtureServer() {
       ws.on('message', data => {
         let value
         try { value = JSON.parse(data.toString('utf8')) } catch { return }
+        server.desktopMessages.push({ value, receivedAt: Date.now() })
         if (value.type === 'select-display') ws.send(JSON.stringify({ type: 'display-list', displays, selectedDisplayId: value.displayId }))
       })
     })

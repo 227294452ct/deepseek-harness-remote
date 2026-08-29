@@ -87,11 +87,50 @@ app.whenReady().then(async () => {
     assert.equal(portraitViewer.historyState, true)
     assert.match(portraitViewer.status, /控制/)
 
+    const tapStartedAt = Date.now()
+    await window.webContents.executeJavaScript(`(async () => {
+      const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const image=stage.querySelector('img');
+      image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="black"/></svg>'); await image.decode();
+      const rect=stage.getBoundingClientRect(); const scale=Math.min(rect.width/image.naturalWidth,rect.height/image.naturalHeight); const shownHeight=image.naturalHeight*scale; const shownTop=rect.top+(rect.height-shownHeight)/2; const x=rect.left+rect.width/2; const y=shownTop+shownHeight*.1;
+      const init={identifier:1,target:stage,clientX:x,clientY:y,pageX:x,pageY:y,screenX:x,screenY:y};
+      const start=new Touch(init); stage.dispatchEvent(new TouchEvent('touchstart',{touches:[start],targetTouches:[start],changedTouches:[start],bubbles:true,cancelable:true}));
+      const end=new Touch(init); stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[end],bubbles:true,cancelable:true}));
+    })()`)
+    while (!server.desktopMessages.some(item => item.value.type === 'pointer' && item.value.action === 'click') && Date.now() - tapStartedAt < 260) {
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    const tapMessage = server.desktopMessages.find(item => item.value.type === 'pointer' && item.value.action === 'click')
+    assert.ok(tapMessage, `tap was not sent immediately: ${JSON.stringify(server.desktopMessages)}`)
+    assert.ok(tapMessage.receivedAt - tapStartedAt < 260, JSON.stringify(tapMessage))
+    assert.ok(Math.abs(tapMessage.value.x - 0.5) < 0.02 && Math.abs(tapMessage.value.y - 0.1) < 0.02, JSON.stringify(tapMessage.value))
+
+    const zoomResult = await window.webContents.executeJavaScript(`(() => {
+      const stage=document.querySelector('[data-dsh-remote-desktop-stage]'); const image=stage.querySelector('img'); const rect=stage.getBoundingClientRect(); const cx=rect.left+rect.width/2; const cy=rect.top+rect.height/2;
+      const touch=(id,x)=>new Touch({identifier:id,target:stage,clientX:x,clientY:cy,pageX:x,pageY:cy,screenX:x,screenY:cy});
+      const a=touch(1,cx-60),b=touch(2,cx+60); stage.dispatchEvent(new TouchEvent('touchstart',{touches:[a,b],targetTouches:[a,b],changedTouches:[a,b],bubbles:true,cancelable:true}));
+      const c=touch(1,cx-24),d=touch(2,cx+24); stage.dispatchEvent(new TouchEvent('touchmove',{touches:[c,d],targetTouches:[c,d],changedTouches:[c,d],bubbles:true,cancelable:true}));
+      const zoomed=getComputedStyle(image).transform; stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[c,d],bubbles:true,cancelable:true}));
+      document.querySelector('[data-action="fit"]').click(); return {zoomed,fit:getComputedStyle(image).transform};
+    })()`)
+    assert.match(zoomResult.zoomed, /^matrix\(0\.[34]/, JSON.stringify(zoomResult))
+    assert.equal(zoomResult.fit, 'matrix(1, 0, 0, 1, 0, 0)')
+
     window.setContentSize(852, 393)
     await new Promise(resolve => setTimeout(resolve, 100))
-    const landscapeViewer = await window.webContents.executeJavaScript(`(() => { const viewer=document.querySelector('[data-dsh-remote-desktop-viewer]'); const rect=viewer.getBoundingClientRect(); viewer.querySelector('[data-action="keyboard"]').click(); return {viewport:{width:innerWidth,height:innerHeight},rect:{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom},keyboard:getComputedStyle(viewer.querySelector('[data-dsh-remote-keyboard]')).display} })()`)
+    const landscapeViewer = await window.webContents.executeJavaScript(`(() => {
+      const viewer=document.querySelector('[data-dsh-remote-desktop-viewer]'); const rect=viewer.getBoundingClientRect(); const stage=viewer.querySelector('[data-dsh-remote-desktop-stage]'); const image=stage.querySelector('img');
+      viewer.querySelector('[data-action="keyboard"]').click();
+      const stageRect=stage.getBoundingClientRect(); const controls=[...viewer.querySelectorAll('[data-dsh-remote-desktop-toolbar] button,[data-dsh-remote-desktop-toolbar] select')].map(node=>{const value=node.getBoundingClientRect();return{left:value.left,right:value.right,top:value.top,bottom:value.bottom}});
+      return {viewport:{width:innerWidth,height:innerHeight},visualViewport:window.visualViewport&&{left:window.visualViewport.offsetLeft,top:window.visualViewport.offsetTop,width:window.visualViewport.width,height:window.visualViewport.height},rect:{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom},scroll:{width:viewer.scrollWidth,height:viewer.scrollHeight},stage:{left:stageRect.left,top:stageRect.top,right:stageRect.right,bottom:stageRect.bottom},controls,boxSizing:getComputedStyle(viewer).boxSizing,objectFit:getComputedStyle(image).objectFit,keyboard:getComputedStyle(viewer.querySelector('[data-dsh-remote-keyboard]')).display}
+    })()`)
     assert.ok(landscapeViewer.viewport.width >= 849 && landscapeViewer.viewport.height >= 390, JSON.stringify(landscapeViewer))
     assert.ok(Math.abs(landscapeViewer.rect.left) < 1 && Math.abs(landscapeViewer.rect.top) < 1 && Math.abs(landscapeViewer.rect.right - landscapeViewer.viewport.width) < 1 && Math.abs(landscapeViewer.rect.bottom - landscapeViewer.viewport.height) < 1, JSON.stringify(landscapeViewer))
+    assert.ok(!landscapeViewer.visualViewport || (Math.abs(landscapeViewer.rect.left - landscapeViewer.visualViewport.left) < 1 && Math.abs(landscapeViewer.rect.top - landscapeViewer.visualViewport.top) < 1 && Math.abs((landscapeViewer.rect.right - landscapeViewer.rect.left) - landscapeViewer.visualViewport.width) < 1 && Math.abs((landscapeViewer.rect.bottom - landscapeViewer.rect.top) - landscapeViewer.visualViewport.height) < 1), JSON.stringify(landscapeViewer))
+    assert.ok(landscapeViewer.scroll.width <= landscapeViewer.viewport.width && landscapeViewer.scroll.height <= landscapeViewer.viewport.height, JSON.stringify(landscapeViewer))
+    assert.ok(landscapeViewer.stage.left >= 0 && landscapeViewer.stage.right <= landscapeViewer.viewport.width && landscapeViewer.stage.top >= 0 && landscapeViewer.stage.bottom <= landscapeViewer.viewport.height, JSON.stringify(landscapeViewer))
+    assert.ok(landscapeViewer.controls.every(rect => rect.left >= 0 && rect.right <= landscapeViewer.viewport.width && rect.top >= 0 && rect.bottom <= landscapeViewer.viewport.height), JSON.stringify(landscapeViewer.controls))
+    assert.equal(landscapeViewer.boxSizing, 'border-box')
+    assert.equal(landscapeViewer.objectFit, 'contain')
     assert.equal(landscapeViewer.keyboard, 'grid')
 
     await window.webContents.executeJavaScript(`history.back()`)

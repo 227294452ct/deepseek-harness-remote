@@ -1,41 +1,39 @@
-# Mobile layout and remote desktop QA
+# Privacy Screen Design QA
 
-## Scope
+- Source visual truth: the user-selected reference shown on the left side of `desktop/control-indicator-comparison.png` (the original temporary attachment is intentionally not committed)
+- Implementation screenshot: `desktop/control-indicator-implementation.png`
+- Side-by-side evidence: `desktop/control-indicator-comparison.png`
+- Viewport: 1672 × 942 CSS pixels at device scale factor 1
+- Pixel normalization: source 1672 × 941; implementation 1672 × 942, cropped by one bottom pixel to 1672 × 941 for comparison
+- State: active remote-control privacy screen with device `Vivo V2454DA`
 
-- Source reference: `Photo 1.jpg` supplied by the user.
-- Target: remote Harness session at a 393 × 852 portrait viewport.
-- Primary defect: the question composer footer placed pager, status, skip, and primary action in one non-wrapping row, pushing the primary action beyond the right edge.
+## Findings
 
-## Visual comparison
+- No actionable P0, P1, or P2 differences remain.
+- P3: the installed Microsoft YaHei UI glyphs are slightly narrower than the raster mock's generated Chinese glyphs. Font size, weight, line height, hierarchy, and wrapping remain faithful and readable.
 
-- Preserved the existing left rail, session header, conversation content, question hierarchy, typography, and button labels.
-- Changed only the narrow portrait layout: pager/status remain on the first footer row; `跳过本题` and the primary action use two equal-width columns on the second row.
-- The `Session log` utility becomes an accessible icon-only button below 420 px, preventing the title/header cluster from overflowing.
-- Question and plan-review cards now use border-box sizing, safe horizontal padding, long-text wrapping, and 42 px minimum action height.
+## Required Fidelity Surfaces
 
-## Browser audit
+- Fonts and typography: two-line headline, weight, line height, centered alignment, device line, and bottom notice match the source hierarchy; minor generated-glyph width difference accepted as P3.
+- Spacing and layout rhythm: headline, underline, device state, and bottom notice align with the source after the vertical-position correction.
+- Colors and visual tokens: deep blue-black background, soft central blue light, white headline, muted blue supporting copy, blue rule, and green state dot match.
+- Image quality and asset fidelity: the selected background treatment is supplied as a dedicated full-resolution raster asset and rendered with `cover`; no placeholder or code-drawn substitute is used.
+- Copy and content: all selected copy is preserved; the device name remains runtime-driven.
 
-- In-app browser viewport: 394 × 852 CSS px (the requested 393 px viewport rounds to 394 px on this display scale).
-- Document scroll width: 394 px; no horizontal overflow.
-- Question card bounds: left 72 px, right 385.6 px.
-- Footer action bounds: `跳过本题` 82.8–224.8 px; primary action 232.8–374.8 px.
-- All 13 visible buttons remained fully within the viewport and were present in the hit-testable layout.
-- Both footer actions measured 142 × 42 px and did not overlap.
-- Automated gateway/proxy regression test and portrait layout test passed.
-- Rendered audit image: `output/mobile-layout-portrait.png`.
+## Comparison History
 
-## Remote desktop overlay audit
+1. Initial capture placed the central content approximately 6 px too high and showed the generic fallback device state.
+2. Changed the main transform from -55% to -53% and added a preview-only query value for same-state comparison.
+3. Recaptured at the same viewport. The full-view comparison shows no remaining actionable P0/P1/P2 differences.
 
-- Mobile-only sidebar entry is icon-only in the 64 px collapsed rail and retains `aria-label="桌面"`; the label appears when the rail is expanded.
-- The viewer covers the safe viewport at both 393 × 852 portrait and 852 × 393 landscape sizes without document overflow.
-- Main/secondary display options, connection/control status, keyboard panel and same-URL history state were exercised against the WebSocket fixture.
-- Android-style back navigation removes the viewer before leaving the Harness page.
-- The workspace dialog fixture received `C:\` and `F:\` shortcuts; choosing `F:\` submitted the existing edit-path input instead of bypassing the Harness directory workflow.
+## Focused Evidence
 
-## Severity review
+The central headline/device group and bottom notice are readable at original resolution in the side-by-side image, so separate enlarged crops were not needed.
 
-- P0 blockers: none.
-- P1 major layout or interaction defects: none.
-- P2 visible overflow, clipping, or hierarchy defects: none.
+## Verification
+
+- Static HTML rendered in a Chromium engine at the target viewport.
+- Dynamic device text path preserved through the Electron preload bridge.
+- Screen is intentionally non-interactive; no primary controls are present to exercise.
 
 final result: passed

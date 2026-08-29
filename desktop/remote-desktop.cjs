@@ -37,6 +37,7 @@ class WindowsInputHelper extends EventEmitter {
     this.dryRun = options.dryRun === true
     this.child = null
     this.closing = false
+    this.stdoutBuffer = ''
   }
 
   ensureStarted() {
@@ -52,7 +53,19 @@ class WindowsInputHelper extends EventEmitter {
     })
     this.child = child
     this.closing = false
-    child.stdout.on('data', chunk => this.log(`Desktop input: ${chunk.toString('utf8').trim()}`))
+    this.stdoutBuffer = ''
+    child.stdout.on('data', chunk => {
+      this.stdoutBuffer += chunk.toString('utf8')
+      const lines = this.stdoutBuffer.split(/\r?\n/)
+      this.stdoutBuffer = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        let value
+        try { value = JSON.parse(line) } catch { this.log(`Desktop input: ${line.trim()}`); continue }
+        if (value?.event === 'local-input') this.emit('local-input', { kind: value.kind === 'keyboard' ? 'keyboard' : 'mouse' })
+        else this.log(`Desktop input: ${line.trim()}`)
+      }
+    })
     child.stderr.on('data', chunk => this.log(`Desktop input error: ${chunk.toString('utf8').trim()}`))
     child.once('error', error => this.emit('failure', error))
     child.once('exit', code => {
@@ -97,10 +110,15 @@ class ElectronDesktopProvider extends EventEmitter {
       log: this.log
     })
     this.input.on('failure', error => this.emit('input-error', error))
+    this.input.on('local-input', value => this.emit('local-input', value))
   }
 
   isAvailable() {
     return process.platform === 'win32' && Boolean(this.desktopCapturer && this.screen)
+  }
+
+  prepare() {
+    this.input.ensureStarted()
   }
 
   listDisplays() {
@@ -136,7 +154,7 @@ class ElectronDesktopProvider extends EventEmitter {
     const image = scale < 1
       ? source.thumbnail.resize({ width: Math.max(1, Math.round(size.width * scale)), height: Math.max(1, Math.round(size.height * scale)), quality: 'good' })
       : source.thumbnail
-    return image.toJPEG(65)
+    return image.toJPEG(60)
   }
 
   dispatchInput(displayId, message) {

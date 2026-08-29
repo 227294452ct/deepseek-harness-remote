@@ -10,7 +10,7 @@ const DEFAULT_UPSTREAM_URL = 'http://127.0.0.1:32145'
 
 let remoteWindow = null
 let remoteGateway = null
-let controlIndicator = null
+let controlIndicators = []
 let upstreamUrl = null
 let logPath = null
 let shutdownStarted = false
@@ -75,21 +75,29 @@ function broadcastStatus() {
 
 function showControlIndicator(state) {
   if (!state?.active) {
-    controlIndicator?.hide()
+    for (const indicator of controlIndicators) if (!indicator.isDestroyed()) indicator.destroy()
+    controlIndicators = []
     return
   }
-  if (!controlIndicator || controlIndicator.isDestroyed()) {
-    controlIndicator = new BrowserWindow({
-      width: 330,
-      height: 58,
+  const displays = screen.getAllDisplays()
+  while (controlIndicators.length > displays.length) controlIndicators.pop()?.destroy()
+  displays.forEach((display, index) => {
+    let controlIndicator = controlIndicators[index]
+    if (!controlIndicator || controlIndicator.isDestroyed()) {
+      controlIndicator = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
       frame: false,
-      transparent: true,
+      transparent: false,
+      backgroundColor: '#020617',
       resizable: false,
       movable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       show: false,
-      focusable: true,
+      focusable: false,
       webPreferences: {
         preload: path.join(__dirname, 'control-indicator-preload.cjs'),
         contextIsolation: true,
@@ -97,18 +105,22 @@ function showControlIndicator(state) {
         sandbox: true,
         webSecurity: true
       }
-    })
-    controlIndicator.setAlwaysOnTop(true, 'screen-saver')
-    controlIndicator.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    controlIndicator.webContents.on('will-navigate', event => event.preventDefault())
-    void controlIndicator.loadFile(path.join(__dirname, 'control-indicator.html'))
-  }
-  const workArea = screen.getPrimaryDisplay().workArea
-  controlIndicator.setPosition(workArea.x + workArea.width - 346, workArea.y + 12, false)
-  controlIndicator.showInactive()
-  const sendState = () => controlIndicator && !controlIndicator.isDestroyed() && controlIndicator.webContents.send('remote:desktop-control', state)
-  if (controlIndicator.webContents.isLoadingMainFrame()) controlIndicator.webContents.once('did-finish-load', sendState)
-  else sendState()
+      })
+      controlIndicator.setContentProtection(true)
+      controlIndicator.setIgnoreMouseEvents(true)
+      controlIndicator.setAlwaysOnTop(true, 'screen-saver')
+      controlIndicator.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      controlIndicator.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      controlIndicator.webContents.on('will-navigate', event => event.preventDefault())
+      void controlIndicator.loadFile(path.join(__dirname, 'control-indicator.html'))
+      controlIndicators[index] = controlIndicator
+    }
+    controlIndicator.setBounds(display.bounds, false)
+    controlIndicator.showInactive()
+    const sendState = () => !controlIndicator.isDestroyed() && controlIndicator.webContents.send('remote:desktop-control', state)
+    if (controlIndicator.webContents.isLoadingMainFrame()) controlIndicator.webContents.once('did-finish-load', sendState)
+    else sendState()
+  })
 }
 
 async function enableRemote() {

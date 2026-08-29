@@ -37,6 +37,7 @@
       "remote.html",
       "control-indicator-preload.cjs",
       "control-indicator.html",
+      "control-indicator-background.png",
       "dsh-remote.patch.yml",
       "build/icon.png",
       "package.json"
