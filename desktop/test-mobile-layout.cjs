@@ -38,6 +38,8 @@ app.whenReady().then(async () => {
       const settingsButton = document.querySelector('button[aria-haspopup="dialog"][aria-expanded]')
       const desktopButton = document.querySelector('[data-dsh-remote-desktop-entry]')
       const sendButton = document.querySelector('[data-dsh-remote-send]')
+      const heroHeading = document.querySelector('[data-dsh-remote-composer-heading]')
+      const heroHeadline = heroHeading?.querySelector('.hero-headline')
       const rectOf = node => { const rect=node.getBoundingClientRect(); return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height} }
       const actionButtons = [...document.querySelectorAll('[data-question-key] > section > footer > :last-child > button')].map(button => {
         const rect = button.getBoundingClientRect()
@@ -54,6 +56,8 @@ app.whenReady().then(async () => {
         settingsButton: rectOf(settingsButton),
         desktopButton: rectOf(desktopButton),
         sendButton: rectOf(sendButton),
+        heroHeadingClass: heroHeading?.className,
+        heroHeadline: heroHeadline ? rectOf(heroHeadline) : null,
         footerDisplay: getComputedStyle(document.querySelector('[data-question-key] > section > footer')).display,
         actionsColumns: getComputedStyle(document.querySelector('[data-question-key] > section > footer > :last-child')).gridTemplateColumns,
         card: { left: card.left, right: card.right, width: card.width },
@@ -73,6 +77,8 @@ app.whenReady().then(async () => {
     assert.ok(audit.desktopButton.bottom <= audit.settingsButton.top, JSON.stringify({ desktop: audit.desktopButton, settings: audit.settingsButton }))
     assert.ok(audit.desktopButton.top >= 0 && audit.settingsButton.bottom <= audit.viewport.height, JSON.stringify(audit))
     assert.ok(audit.sendButton.width >= 33 && audit.sendButton.right <= audit.viewport.width && audit.sendButton.left >= 64, JSON.stringify(audit.sendButton))
+    assert.equal(audit.heroHeadingClass, 'hero-heading', JSON.stringify(audit))
+    assert.ok(audit.heroHeadline.height <= 34, JSON.stringify(audit.heroHeadline))
     assert.equal(audit.footerDisplay, 'grid')
     assert.ok(audit.card.left >= 64 && audit.card.right <= audit.viewport.width, JSON.stringify(audit.card))
     assert.ok(audit.actions.left >= audit.card.left && audit.actions.right <= audit.card.right, JSON.stringify(audit.actions))

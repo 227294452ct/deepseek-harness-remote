@@ -226,7 +226,10 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       if (slot && slot.parentElement) {
         const stack = slot.parentElement
         stack.setAttribute('data-dsh-remote-composer-stack', '')
-        const heading = Array.from(stack.children).find(child => child !== slot && child.getBoundingClientRect().height > 0)
+        const heroMark = Array.from(stack.querySelectorAll('[data-slot]')).find(node => node.getAttribute('data-slot') === 'conversation.hero.brand.mark')
+        const heading = heroMark
+          ? Array.from(stack.children).find(child => child.contains(heroMark))
+          : Array.from(stack.children).find(child => child !== slot && child.tagName !== 'svg' && (child.textContent || '').trim() && child.getBoundingClientRect().height > 0)
         if (heading) heading.setAttribute('data-dsh-remote-composer-heading', '')
       }
     })
