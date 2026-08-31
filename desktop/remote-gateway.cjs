@@ -173,10 +173,15 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     '  [data-plan-review-key] > section > footer > :last-child > button { box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; min-height: 42px !important; white-space: normal !important; }',
     '  [data-dsh-remote-composer-stack], [data-dsh-remote-composer-root], [data-dsh-remote-composer-card], [data-dsh-remote-composer-row], [data-dsh-remote-composer-trailing] { box-sizing: border-box !important; min-width: 0 !important; max-width: 100% !important; }',
     '  [data-dsh-remote-composer-stack], [data-dsh-remote-composer-root] { width: 100% !important; }',
-    '  [data-dsh-remote-composer-row], [data-dsh-remote-composer-trailing] { overflow: hidden !important; }',
-    '  [data-dsh-remote-composer-trailing] { display: flex !important; align-items: center !important; }',
+    '  [data-dsh-remote-composer-stack] { padding-inline: 0 !important; }',
+    '  [data-dsh-remote-composer-heading] { box-sizing: border-box !important; width: 100% !important; min-width: 0 !important; padding-inline: 12px !important; }',
+    '  [data-dsh-remote-composer-root] { padding-inline: 8px !important; }',
+    '  [data-dsh-remote-composer-card] { position: relative !important; overflow: visible !important; }',
+    '  [data-dsh-remote-composer-row], [data-dsh-remote-composer-trailing] { overflow: visible !important; }',
+    '  [data-dsh-remote-composer-trailing] { display: grid !important; grid-template-columns: auto minmax(96px, 1fr) auto !important; align-items: center !important; gap: 6px !important; width: 100% !important; position: relative !important; }',
     '  [data-dsh-remote-composer-trailing] > * { min-width: 0 !important; max-width: 100% !important; }',
-    '  [data-dsh-remote-composer-trailing] button:not([data-dsh-remote-send]) { flex-shrink: 1 !important; overflow: hidden !important; }',
+    '  [data-dsh-remote-composer-trailing] button:not([data-dsh-remote-send]) { min-width: 0 !important; max-width: 100% !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }',
+    '  [data-dsh-remote-composer-trailing] [role="menu"] { max-width: min(230px, calc(100vw - 80px)) !important; z-index: 2147483000 !important; }',
     '  [data-dsh-remote-send] { display: grid !important; visibility: visible !important; opacity: 1 !important; flex: 0 0 34px !important; width: 34px !important; min-width: 34px !important; max-width: 34px !important; height: 34px !important; margin-left: 4px !important; position: relative !important; z-index: 2 !important; }',
     '}',
     '@media (max-width: 420px) and (orientation: portrait) {',
@@ -218,7 +223,12 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       if (card) card.setAttribute('data-dsh-remote-composer-card', '')
       if (root) root.setAttribute('data-dsh-remote-composer-root', '')
       const slot = button.closest('[data-slot="conversation.composer.bar"]')
-      if (slot && slot.parentElement) slot.parentElement.setAttribute('data-dsh-remote-composer-stack', '')
+      if (slot && slot.parentElement) {
+        const stack = slot.parentElement
+        stack.setAttribute('data-dsh-remote-composer-stack', '')
+        const heading = Array.from(stack.children).find(child => child !== slot && child.getBoundingClientRect().height > 0)
+        if (heading) heading.setAttribute('data-dsh-remote-composer-heading', '')
+      }
     })
   }
 
@@ -599,9 +609,18 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       const sourceWidth = image && image.naturalWidth > 0 ? image.naturalWidth : display.width
       const sourceHeight = image && image.naturalHeight > 0 ? image.naturalHeight : display.height
       const fitScale = Math.min(rect.width / sourceWidth, rect.height / sourceHeight)
-      const width = sourceWidth * fitScale * desktopViewScale
-      const height = sourceHeight * fitScale * desktopViewScale
-      return { rect, width, height, left: rect.left + (rect.width - width) / 2 + desktopViewOffsetX, top: rect.top + (rect.height - height) / 2 + desktopViewOffsetY }
+      const baseWidth = sourceWidth * fitScale
+      const baseHeight = sourceHeight * fitScale
+      const width = baseWidth * desktopViewScale
+      const height = baseHeight * desktopViewScale
+      return {
+        image, rect, baseWidth, baseHeight,
+        baseLeft: rect.left + (rect.width - baseWidth) / 2,
+        baseTop: rect.top + (rect.height - baseHeight) / 2,
+        width, height,
+        left: rect.left + (rect.width - width) / 2 + desktopViewOffsetX,
+        top: rect.top + (rect.height - height) / 2 + desktopViewOffsetY
+      }
     }
     const clampDesktopOffset = () => {
       const metrics = imageMetrics()
@@ -615,12 +634,35 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     const mapped = touch => {
       const metrics = imageMetrics()
       if (!metrics) return null
-      const { left, top, width, height } = metrics
+      let clientX = touch.clientX
+      let clientY = touch.clientY
+      let left = metrics.left
+      let top = metrics.top
+      let width = metrics.width
+      let height = metrics.height
+      const Matrix = window.DOMMatrixReadOnly || window.DOMMatrix
+      if (metrics.image && Matrix) {
+        const transform = getComputedStyle(metrics.image).transform
+        if (transform && transform !== 'none') {
+          try {
+            const inverse = new Matrix(transform).inverse()
+            const originX = metrics.rect.left + metrics.rect.width / 2
+            const originY = metrics.rect.top + metrics.rect.height / 2
+            const point = new DOMPoint(clientX - originX, clientY - originY).matrixTransform(inverse)
+            clientX = originX + point.x
+            clientY = originY + point.y
+            left = metrics.baseLeft
+            top = metrics.baseTop
+            width = metrics.baseWidth
+            height = metrics.baseHeight
+          } catch {}
+        }
+      }
       const tolerance = 2
-      if (touch.clientX < left - tolerance || touch.clientX > left + width + tolerance || touch.clientY < top - tolerance || touch.clientY > top + height + tolerance) return null
+      if (clientX < left - tolerance || clientX > left + width + tolerance || clientY < top - tolerance || clientY > top + height + tolerance) return null
       return {
-        x: Math.max(0, Math.min(1, (touch.clientX - left) / width)),
-        y: Math.max(0, Math.min(1, (touch.clientY - top) / height))
+        x: Math.max(0, Math.min(1, (clientX - left) / width)),
+        y: Math.max(0, Math.min(1, (clientY - top) / height))
       }
     }
     const pointerValue = (action, value, button) => {

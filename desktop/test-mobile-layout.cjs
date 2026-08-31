@@ -24,6 +24,8 @@ app.whenReady().then(async () => {
   try {
     window.webContents.setUserAgent('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Mobile Safari/537.36')
     await window.loadURL(`http://127.0.0.1:${port}/`)
+    window.setContentSize(360, 792)
+    await new Promise(resolve => setTimeout(resolve, 80))
     await window.webContents.executeJavaScript(`new Promise((resolve, reject) => { const started=Date.now(); const poll=()=>{ if(document.querySelector('[data-dsh-remote-desktop-entry]'))resolve(); else if(Date.now()-started>3000)reject(new Error('desktop entry timed out')); else setTimeout(poll,25) }; poll() })`)
     const audit = await window.webContents.executeJavaScript(`(() => {
       const visibleButtons = [...document.querySelectorAll('button')].filter(button => button.getClientRects().length > 0)
@@ -61,7 +63,7 @@ app.whenReady().then(async () => {
       }
     })()`)
 
-    assert.ok(audit.viewport.width >= 390 && audit.viewport.width <= 400, JSON.stringify(audit.viewport))
+    assert.ok(audit.viewport.width >= 358 && audit.viewport.width <= 362, JSON.stringify(audit.viewport))
     assert.ok(audit.documentWidth <= audit.viewport.width, JSON.stringify(audit))
     assert.equal(audit.hasLayoutStyle, true)
     assert.equal(audit.sessionLogLabel, 'Session log')
@@ -78,6 +80,19 @@ app.whenReady().then(async () => {
     assert.ok(audit.actionButtons.every(rect => rect.width >= 80 && rect.height >= 40 && rect.left >= audit.card.left && rect.right <= audit.card.right), JSON.stringify(audit.actionButtons))
     assert.ok(audit.actionButtons[0].right <= audit.actionButtons[1].left)
     assert.ok(audit.buttonRects.every(rect => rect.left >= 0 && rect.right <= audit.viewport.width && rect.top >= 0 && rect.bottom <= audit.viewport.height), JSON.stringify(audit.buttonRects))
+
+    const modelMenuAudit = await window.webContents.executeJavaScript(`(() => {
+      const modelButton=document.querySelector('button[aria-haspopup="menu"]'); modelButton.click();
+      const menu=document.querySelector('[role="menu"]'); const rect=menu.getBoundingClientRect(); const trailing=menu.closest('[data-dsh-remote-composer-trailing]');
+      const hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
+      return {expanded:modelButton.getAttribute('aria-expanded'),hidden:menu.hidden,rect:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height},trailingOverflow:getComputedStyle(trailing).overflow,hitMenu:Boolean(hit&&hit.closest('[role="menu"]'))};
+    })()`)
+    assert.equal(modelMenuAudit.expanded, 'true', JSON.stringify(modelMenuAudit))
+    assert.equal(modelMenuAudit.hidden, false, JSON.stringify(modelMenuAudit))
+    assert.equal(modelMenuAudit.trailingOverflow, 'visible', JSON.stringify(modelMenuAudit))
+    assert.equal(modelMenuAudit.hitMenu, true, JSON.stringify(modelMenuAudit))
+    assert.ok(modelMenuAudit.rect.left >= 64 && modelMenuAudit.rect.right <= audit.viewport.width && modelMenuAudit.rect.top >= 0 && modelMenuAudit.rect.bottom <= audit.viewport.height, JSON.stringify(modelMenuAudit))
+    await window.webContents.executeJavaScript(`document.querySelector('button[aria-haspopup="menu"]').click()`)
 
     await window.webContents.executeJavaScript(`document.querySelector('[data-dsh-remote-desktop-entry]').click()`)
     await window.webContents.executeJavaScript(`new Promise((resolve, reject) => { const started=Date.now(); const poll=()=>{ const node=document.querySelector('[data-dsh-remote-desktop-viewer]'); if(node&&node.querySelectorAll('select option').length===2)resolve(); else if(Date.now()-started>3000)reject(new Error('viewer timed out')); else setTimeout(poll,25) }; poll() })`)
@@ -186,6 +201,24 @@ app.whenReady().then(async () => {
     assert.equal(landscapeViewer.boxSizing, 'border-box')
     assert.equal(landscapeViewer.objectFit, 'contain')
     assert.equal(landscapeViewer.keyboard, 'grid')
+
+    server.desktopMessages.length = 0
+    const zoomedTaskbarPoint = await window.webContents.executeJavaScript(`(() => {
+      const viewer=document.querySelector('[data-dsh-remote-desktop-viewer]'); viewer.querySelector('[data-action="keyboard"]').click();
+      const stage=viewer.querySelector('[data-dsh-remote-desktop-stage]'),image=stage.querySelector('img'),rect=stage.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+      const touch=(id,x,y)=>new Touch({identifier:id,target:stage,clientX:x,clientY:y,pageX:x,pageY:y,screenX:x,screenY:y});
+      const a=touch(71,cx-80,cy),b=touch(72,cx+80,cy); stage.dispatchEvent(new TouchEvent('touchstart',{touches:[a,b],targetTouches:[a,b],changedTouches:[a,b],bubbles:true,cancelable:true}));
+      const c=touch(71,cx-120,cy-100),d=touch(72,cx+120,cy-100); stage.dispatchEvent(new TouchEvent('touchmove',{touches:[c,d],targetTouches:[c,d],changedTouches:[c,d],bubbles:true,cancelable:true})); stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[c,d],bubbles:true,cancelable:true}));
+      const fit=Math.min(rect.width/image.naturalWidth,rect.height/image.naturalHeight),baseWidth=image.naturalWidth*fit,baseHeight=image.naturalHeight*fit,baseLeft=rect.left+(rect.width-baseWidth)/2,baseTop=rect.top+(rect.height-baseHeight)/2;
+      const target={x:baseLeft+baseWidth*.5,y:baseTop+baseHeight*.97},origin={x:cx,y:cy},matrix=new DOMMatrixReadOnly(getComputedStyle(image).transform),visual=new DOMPoint(target.x-origin.x,target.y-origin.y).matrixTransform(matrix),client={x:origin.x+visual.x,y:origin.y+visual.y};
+      const tap=touch(73,client.x,client.y); stage.dispatchEvent(new TouchEvent('touchstart',{touches:[tap],targetTouches:[tap],changedTouches:[tap],bubbles:true,cancelable:true})); stage.dispatchEvent(new TouchEvent('touchend',{touches:[],targetTouches:[],changedTouches:[tap],bubbles:true,cancelable:true}));
+      return {client,stage:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},transform:getComputedStyle(image).transform};
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    const zoomedTaskbarClick = server.desktopMessages.find(item => item.value.type === 'pointer' && item.value.action === 'click')?.value
+    assert.ok(zoomedTaskbarPoint.client.x >= zoomedTaskbarPoint.stage.left && zoomedTaskbarPoint.client.x <= zoomedTaskbarPoint.stage.right && zoomedTaskbarPoint.client.y >= zoomedTaskbarPoint.stage.top && zoomedTaskbarPoint.client.y <= zoomedTaskbarPoint.stage.bottom, JSON.stringify(zoomedTaskbarPoint))
+    assert.ok(zoomedTaskbarClick && Math.abs(zoomedTaskbarClick.x - 0.5) < 0.01 && Math.abs(zoomedTaskbarClick.y - 0.97) < 0.01, JSON.stringify({ zoomedTaskbarPoint, zoomedTaskbarClick, messages: server.desktopMessages }))
+    await window.webContents.executeJavaScript(`document.querySelector('[data-action="fit"]').click()`)
 
     await window.webContents.executeJavaScript(`history.back()`)
     await new Promise(resolve => setTimeout(resolve, 100))

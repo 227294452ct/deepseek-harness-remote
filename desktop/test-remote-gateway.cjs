@@ -216,6 +216,9 @@ async function main() {
     assert.match(compatSource, /desktopViewScale = Math\.max\(0\.35/)
     assert.match(compatSource, /desktopCloseRequested/)
     assert.match(compatSource, /history\.pushState\(\{ dshRemoteDesktop: true \}/)
+    assert.match(compatSource, /DOMMatrixReadOnly/)
+    assert.match(compatSource, /data-dsh-remote-composer-heading/)
+    assert.match(compatSource, /\[role="menu"\]/)
     assert.doesNotMatch(compatSource, /tapTimer/)
     assert.doesNotThrow(() => new vm.Script(compatSource))
 

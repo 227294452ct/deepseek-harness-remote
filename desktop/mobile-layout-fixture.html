@@ -50,12 +50,17 @@
     .composer-stack { flex: none; width: 100%; padding: 0 8px 10px; }
     .composer-root { width: 100%; padding: 0 8px; }
     .composer-card { width: 100%; padding: 12px; border: 1px solid #d9dde5; border-radius: 22px; background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.08); }
-    .composer-row { width: 100%; overflow: hidden; }
+    .composer-row { display: grid; gap: 8px; width: 100%; overflow: hidden; }
+    .composer-leading { display: flex; align-items: center; gap: 7px; }
     .composer-trailing { display: flex; align-items: center; gap: 7px; width: 100%; overflow: hidden; white-space: nowrap; }
     .composer-trailing button { flex: none; height: 34px; border: 0; border-radius: 17px; background: #f1f5f9; }
     .vision { width: 48px; }
     .access { width: 42px; }
     .model { min-width: 230px; max-width: none; padding: 0 14px; overflow: hidden; text-overflow: ellipsis; }
+    .model-root { position: relative; min-width: 0; }
+    .model-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 20; width: 238px; padding: 8px; overflow: hidden; border: 1px solid #d1d5db; border-radius: 12px; background: #fff; box-shadow: 0 12px 30px rgba(15,23,42,.18); }
+    .model-menu[hidden] { display: none; }
+    .model-menu button { display: block; width: 100%; height: 38px; text-align: left; background: transparent; }
     .send { width: 34px; background: #111827 !important; color: #fff; }
   </style>
   <script src="/compat.js" defer></script>
@@ -101,10 +106,10 @@
           <div class="composer-root">
             <div class="composer-card">
               <div class="composer-row">
+                <div class="composer-leading"><button class="access" aria-label="访问模式：ask">◇</button></div>
                 <div class="composer-trailing">
                   <button class="vision" aria-label="识图">◉</button>
-                  <button class="access" aria-label="访问模式：ask">◇</button>
-                  <button class="model" aria-label="选择模型：DeepSeek-V4-Flash-Very-Long-Model-Name">DeepSeek-V4-Flash-Very-Long-Model-Name · High</button>
+                  <div data-slot="conversation.input.model"><div class="model-root"><button class="model" aria-label="选择模型：DeepSeek-V4-Flash-Very-Long-Model-Name" aria-haspopup="menu" aria-expanded="false">DeepSeek-V4-Flash-Very-Long-Model-Name · High</button><div class="model-menu" role="menu" aria-label="模型与推理等级" hidden><button role="menuitem">模型 DeepSeek-V4-Flash</button><button role="menuitem">推理等级 High</button></div></div></div>
                   <button class="send" aria-label="发送消息">➤</button>
                 </div>
               </div>
@@ -138,5 +143,14 @@
       </div>
     </main>
   </div>
+  <script>
+    const modelButton = document.querySelector('.model')
+    const modelMenu = document.querySelector('.model-menu')
+    modelButton.addEventListener('click', () => {
+      const open = modelButton.getAttribute('aria-expanded') !== 'true'
+      modelButton.setAttribute('aria-expanded', String(open))
+      modelMenu.hidden = !open
+    })
+  </script>
 </body>
 </html>
