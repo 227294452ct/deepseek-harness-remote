@@ -371,6 +371,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   let desktopViewScale = 1
   let desktopViewOffsetX = 0
   let desktopViewOffsetY = 0
+  let desktopCloseRequested = false
   const remoteMobileClient = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || (typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches)
 
   const desktopIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 4.8h16v11.4H4zM8.5 20h7M12 16.2V20"/></svg>'
@@ -498,10 +499,14 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     desktopViewScale = 1
     desktopViewOffsetX = 0
     desktopViewOffsetY = 0
+    desktopCloseRequested = false
   }
 
   const requestDesktopClose = () => {
-    if (history.state && history.state.dshRemoteDesktop) history.back()
+    if (history.state && history.state.dshRemoteDesktop) {
+      desktopCloseRequested = true
+      history.back()
+    }
     else teardownDesktopViewer()
   }
 
@@ -554,6 +559,8 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
       if (event.code === 1008 || event.code === 4002 || event.code === 4401) {
         teardownDesktopViewer()
         if (event.code === 4002) showDesktopExitNotice('检测到电脑端操作，远程桌面已强制退出。')
+        else if (event.code === 1008) showDesktopExitNotice('远程输入被拒绝，桌面会话已退出，请重新进入。')
+        else showDesktopExitNotice('远程桌面授权已失效，请重新连接。')
         return
       }
       const retry = () => {
@@ -564,7 +571,10 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
         desktopReconnectTimer = setTimeout(connectDesktopSocket, [500, 1000, 2000][desktopReconnects - 1])
       }
       fetch('/_dsh_remote/v1/desktop/capabilities', { credentials: 'same-origin', cache: 'no-store' }).then(response => {
-        if (response.status === 401 || response.status === 403) teardownDesktopViewer()
+        if (response.status === 401 || response.status === 403) {
+          teardownDesktopViewer()
+          showDesktopExitNotice('远程连接授权已失效，请重新认证。')
+        }
         else retry()
       }).catch(retry)
     }
@@ -772,6 +782,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
 
   const openDesktopViewer = () => {
     if (desktopViewer) return
+    desktopCloseRequested = false
     history.pushState({ dshRemoteDesktop: true }, '', location.href)
     const viewer = document.createElement('div')
     viewer.setAttribute('data-dsh-remote-desktop-viewer', '')
@@ -895,7 +906,14 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     })
   }
 
-  addEventListener('popstate', () => { if (desktopViewer && !(history.state && history.state.dshRemoteDesktop)) teardownDesktopViewer() })
+  addEventListener('popstate', () => {
+    if (!desktopViewer || (history.state && history.state.dshRemoteDesktop)) return
+    if (desktopCloseRequested) {
+      teardownDesktopViewer()
+      return
+    }
+    history.pushState({ dshRemoteDesktop: true }, '', location.href)
+  })
   addEventListener('resize', () => { installDesktopEntry(); scheduleDesktopViewportSync() })
   addEventListener('orientationchange', () => { scheduleDesktopViewportSync(); setTimeout(scheduleDesktopViewportSync, 250) })
   if (window.visualViewport) {

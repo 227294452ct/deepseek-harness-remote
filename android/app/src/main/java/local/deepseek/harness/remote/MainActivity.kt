@@ -17,12 +17,14 @@ import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.MimeTypeMap
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -82,6 +84,7 @@ class MainActivity : FragmentActivity() {
     private var biometricInFlight = false
     private var pendingDownload: DownloadSpec? = null
     private var backDecisionPending = false
+    private var webViewRendererGone = false
 
     private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
         result.contents?.let(::handlePairingUri)
@@ -182,7 +185,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
-        webView.destroy()
+        if (!webViewRendererGone) webView.destroy()
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -272,6 +275,16 @@ class MainActivity : FragmentActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 progress.visibility = View.GONE
+            }
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                webViewRendererGone = true
+                Log.e("DSHRemote", "WebView renderer exited; didCrash=${detail.didCrash()}")
+                (view.parent as? ViewGroup)?.removeView(view)
+                view.destroy()
+                Toast.makeText(this@MainActivity, "远程页面渲染异常，正在自动重新连接…", Toast.LENGTH_LONG).show()
+                mainHandler.post { if (!isFinishing && !isDestroyed) recreate() }
+                return true
             }
         }
         webView.webChromeClient = object : WebChromeClient() {

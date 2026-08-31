@@ -187,6 +187,11 @@ app.whenReady().then(async () => {
     assert.equal(landscapeViewer.objectFit, 'contain')
     assert.equal(landscapeViewer.keyboard, 'grid')
 
+    await window.webContents.executeJavaScript(`history.back()`)
+    await new Promise(resolve => setTimeout(resolve, 100))
+    assert.equal(await window.webContents.executeJavaScript(`Boolean(document.querySelector('[data-dsh-remote-desktop-viewer]'))`), true)
+    assert.equal(await window.webContents.executeJavaScript(`Boolean(history.state&&history.state.dshRemoteDesktop)`), true)
+
     await window.webContents.executeJavaScript(`document.querySelector('[data-action="back"]').click()`)
     await new Promise(resolve => setTimeout(resolve, 100))
     assert.equal(await window.webContents.executeJavaScript(`Boolean(document.querySelector('[data-dsh-remote-desktop-viewer]'))`), false)

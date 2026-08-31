@@ -11,8 +11,8 @@ android {
         applicationId = "local.deepseek.harness.remote"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.2.2"
+        versionCode = 6
+        versionName = "0.2.3"
     }
 
     buildFeatures { buildConfig = true }

@@ -214,6 +214,8 @@ async function main() {
     assert.match(compatSource, /image\.naturalWidth/)
     assert.match(compatSource, /height:100%!important/)
     assert.match(compatSource, /desktopViewScale = Math\.max\(0\.35/)
+    assert.match(compatSource, /desktopCloseRequested/)
+    assert.match(compatSource, /history\.pushState\(\{ dshRemoteDesktop: true \}/)
     assert.doesNotMatch(compatSource, /tapTimer/)
     assert.doesNotThrow(() => new vm.Script(compatSource))
 
