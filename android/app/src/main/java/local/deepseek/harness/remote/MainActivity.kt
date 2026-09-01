@@ -1,6 +1,7 @@
 package local.deepseek.harness.remote
 
 import android.Manifest
+import android.app.Activity
 import android.app.DownloadManager
 import android.app.KeyguardManager
 import android.content.Context
@@ -14,6 +15,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -24,6 +26,7 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.MimeTypeMap
+import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -43,11 +46,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyPairGenerator
@@ -64,6 +69,7 @@ class MainActivity : FragmentActivity() {
         private const val KEY_REQUIRES_AUTH = "key_requires_auth"
         private const val API_PREFIX = "/_dsh_remote/v1"
         private const val BACKGROUND_LOCK_MS = 5 * 60_000L
+        private const val CAMERA_UPLOAD_DIRECTORY = "camera_uploads"
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -80,6 +86,9 @@ class MainActivity : FragmentActivity() {
     private var pendingPairingSecret = ""
     private var pendingPairingExpiry = 0L
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingFileChooser: FileChooserRequest? = null
+    private var pendingCameraUri: Uri? = null
+    private var pendingWebCameraRequest: PermissionRequest? = null
     private var stoppedAt = 0L
     private var biometricInFlight = false
     private var pendingDownload: DownloadSpec? = null
@@ -90,14 +99,36 @@ class MainActivity : FragmentActivity() {
         result.contents?.let(::handlePairingUri)
     }
 
-    private val cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    private val scannerCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) launchScanner()
         else showWelcome("需要相机权限才能扫描电脑端配对二维码。你也可以粘贴配对链接。")
     }
 
-    private val fileLauncher = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        fileCallback?.onReceiveValue(uris.toTypedArray())
-        fileCallback = null
+    private val fileChooserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val uris = if (result.resultCode == Activity.RESULT_OK) {
+            extractChosenUris(result.data).ifEmpty { listOfNotNull(pendingCameraUri) }
+        } else emptyList()
+        finishFileChooser(uris.takeIf { it.isNotEmpty() }?.toTypedArray())
+    }
+
+    private val fileCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val request = pendingFileChooser
+        if (request == null || fileCallback == null) return@registerForActivityResult
+        if (granted) launchFileChooser(request)
+        else {
+            Toast.makeText(this, "未授予相机权限，无法拍照上传。", Toast.LENGTH_LONG).show()
+            if (request.captureEnabled) finishFileChooser(null)
+            else launchFileChooser(request, includeCamera = false)
+        }
+    }
+
+    private val webCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val request = pendingWebCameraRequest
+        pendingWebCameraRequest = null
+        if (request == null) return@registerForActivityResult
+        if (granted && isTrustedRemoteOrigin(request.origin) && request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+            request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+        } else request.deny()
     }
 
     private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -185,6 +216,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
+        pendingWebCameraRequest?.deny()
+        pendingWebCameraRequest = null
+        finishFileChooser(null)
         if (!webViewRendererGone) webView.destroy()
         executor.shutdownNow()
         super.onDestroy()
@@ -261,8 +295,9 @@ class MainActivity : FragmentActivity() {
             allowFileAccess = false
             allowContentAccess = true
             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
             setGeolocationEnabled(false)
-            userAgentString = "$userAgentString DSHRemote/0.1"
+            userAgentString = "$userAgentString DSHRemote/0.2.4"
         }
         webView.settings.safeBrowsingEnabled = true
         webView.webViewClient = object : WebViewClient() {
@@ -289,11 +324,39 @@ class MainActivity : FragmentActivity() {
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(webView: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
-                fileCallback?.onReceiveValue(null)
+                finishFileChooser(null)
                 fileCallback = callback
-                val types = params.acceptTypes.filter { it.isNotBlank() }.toTypedArray().ifEmpty { arrayOf("*/*") }
-                fileLauncher.launch(types)
+                val request = FileChooserRequest(
+                    acceptTypes = normalizeAcceptTypes(params.acceptTypes),
+                    allowMultiple = params.mode == FileChooserParams.MODE_OPEN_MULTIPLE,
+                    captureEnabled = params.isCaptureEnabled
+                )
+                pendingFileChooser = request
+                val cameraNeeded = request.captureEnabled && request.acceptsImages
+                if (cameraNeeded && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                    fileCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                } else launchFileChooser(request)
                 return true
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread {
+                    if (!isTrustedRemoteOrigin(request.origin) || !request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                        request.deny()
+                        return@runOnUiThread
+                    }
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    } else {
+                        pendingWebCameraRequest?.deny()
+                        pendingWebCameraRequest = request
+                        webCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }
+            }
+
+            override fun onPermissionRequestCanceled(request: PermissionRequest) {
+                if (pendingWebCameraRequest === request) pendingWebCameraRequest = null
             }
         }
         webView.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
@@ -318,6 +381,86 @@ class MainActivity : FragmentActivity() {
             Toast.makeText(this, "无法保存下载文件：${error.message}", Toast.LENGTH_LONG).show()
         }
     }
+
+    private fun normalizeAcceptTypes(rawTypes: Array<String>): List<String> {
+        val types = rawTypes
+            .flatMap { it.split(',') }
+            .map { it.substringBefore(';').trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .map { type ->
+                if (type.startsWith('.')) {
+                    MimeTypeMap.getSingleton().getMimeTypeFromExtension(type.removePrefix(".")) ?: "*/*"
+                } else type
+            }
+            .distinct()
+        return types.ifEmpty { listOf("*/*") }
+    }
+
+    private fun launchFileChooser(request: FileChooserRequest, includeCamera: Boolean = true) {
+        try {
+            val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = if (request.acceptTypes.size == 1) request.acceptTypes.first() else "*/*"
+                if (request.acceptTypes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, request.acceptTypes.toTypedArray())
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, request.allowMultiple)
+            }
+            val camera = if (includeCamera && request.acceptsImages && hasCameraPermission()) createCameraIntent() else null
+            if (request.captureEnabled && request.acceptsImages) {
+                if (camera == null) throw IllegalStateException("相机不可用")
+                fileChooserLauncher.launch(camera)
+                return
+            }
+            val chooser = Intent.createChooser(picker, "选择要发送的文件")
+            if (camera != null && !request.allowMultiple) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(camera))
+            fileChooserLauncher.launch(chooser)
+        } catch (error: Exception) {
+            Toast.makeText(this, "无法打开文件选择器：${friendlyError(error)}", Toast.LENGTH_LONG).show()
+            finishFileChooser(null)
+        }
+    }
+
+    private fun createCameraIntent(): Intent? {
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        if (intent.resolveActivity(packageManager) == null) return null
+        val directory = File(cacheDir, CAMERA_UPLOAD_DIRECTORY).apply { mkdirs() }
+        val output = File.createTempFile("dsh-upload-", ".jpg", directory)
+        val uri = FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.fileprovider", output)
+        pendingCameraUri = uri
+        return intent.apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            clipData = android.content.ClipData.newRawUri("DeepSeek Harness camera upload", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+    }
+
+    private fun extractChosenUris(intent: Intent?): List<Uri> {
+        if (intent == null) return emptyList()
+        val output = LinkedHashSet<Uri>()
+        intent.data?.let(output::add)
+        intent.clipData?.let { clip ->
+            for (index in 0 until clip.itemCount) clip.getItemAt(index).uri?.let(output::add)
+        }
+        return output.toList()
+    }
+
+    private fun finishFileChooser(value: Array<Uri>?) {
+        fileCallback?.onReceiveValue(value)
+        fileCallback = null
+        pendingFileChooser = null
+        pendingCameraUri = null
+    }
+
+    private fun hasCameraPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+    private fun isTrustedRemoteOrigin(origin: Uri): Boolean = runCatching {
+        val expected = Uri.parse(currentHost)
+        val originPort = if (origin.port == -1) 443 else origin.port
+        val expectedPort = if (expected.port == -1) 443 else expected.port
+        origin.scheme.equals("https", ignoreCase = true) &&
+            origin.host.equals(expected.host, ignoreCase = true) &&
+            originPort == expectedPort
+    }.getOrDefault(false)
 
     private fun handlePairingUri(raw: String) {
         try {
@@ -384,7 +527,7 @@ class MainActivity : FragmentActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             launchScanner()
         } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            scannerCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -572,4 +715,8 @@ class MainActivity : FragmentActivity() {
 
     data class HttpResult(val status: Int, val body: String, val setCookie: String?)
     data class DownloadSpec(val url: String, val userAgent: String, val contentDisposition: String?, val mimeType: String?)
+    data class FileChooserRequest(val acceptTypes: List<String>, val allowMultiple: Boolean, val captureEnabled: Boolean) {
+        val acceptsImages: Boolean
+            get() = acceptTypes.any { it == "*/*" || it == "image/*" || it.startsWith("image/") }
+    }
 }
