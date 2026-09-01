@@ -45,6 +45,7 @@ app.whenReady().then(async () => {
       const heroHeading = document.querySelector('[data-dsh-remote-composer-heading]')
       const heroHeadline = heroHeading?.querySelector('.hero-headline')
       const composerCard = document.querySelector('[data-dsh-remote-home-composer] [data-dsh-remote-composer-card]')
+      const uploadControls = document.querySelector('[data-dsh-remote-upload-controls]')
       const rectOf = node => { const rect=node.getBoundingClientRect(); return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height} }
       const actionButtons = [...document.querySelectorAll('[data-question-key] > section > footer > :last-child > button')].map(button => {
         const rect = button.getBoundingClientRect()
@@ -65,6 +66,8 @@ app.whenReady().then(async () => {
         sidebarFootHeight: document.querySelector('[data-dsh-remote-sidebar-foot]')?.getBoundingClientRect().height,
         sendButton: rectOf(sendButton),
         composerCard: rectOf(composerCard),
+        uploadActions: [...uploadControls.querySelectorAll('[data-dsh-remote-upload-action]')].map(node => node.getAttribute('data-dsh-remote-upload-action')),
+        uploadButtons: [...uploadControls.querySelectorAll('button')].map(rectOf),
         heroHeading: rectOf(heroHeading),
         heroHeadingClass: heroHeading?.className,
         heroHeadline: heroHeadline ? rectOf(heroHeadline) : null,
@@ -92,6 +95,8 @@ app.whenReady().then(async () => {
     assert.ok(audit.topbarDesktop.top >= 0 && audit.topbarSettings.bottom <= audit.viewport.height, JSON.stringify(audit))
     assert.ok(audit.sendButton.width >= 41 && audit.sendButton.right <= audit.viewport.width && audit.sendButton.left >= 18, JSON.stringify(audit.sendButton))
     assert.ok(audit.composerCard.left >= 18 && audit.composerCard.right <= audit.viewport.width - 18 && audit.composerCard.top >= 0 && audit.composerCard.bottom <= audit.viewport.height && audit.composerCard.height >= 248, JSON.stringify(audit.composerCard))
+    assert.deepEqual(audit.uploadActions, ['gallery', 'camera'], JSON.stringify(audit.uploadActions))
+    assert.ok(audit.uploadButtons.every(rect => rect.width >= 58 && rect.height >= 33 && rect.left >= audit.composerCard.left && rect.right <= audit.composerCard.right), JSON.stringify(audit.uploadButtons))
     assert.equal(audit.heroHeadingClass, 'hero-heading', JSON.stringify(audit))
     assert.ok(audit.heroHeading.height >= 86 && audit.heroHeading.height <= 122, JSON.stringify(audit.heroHeading))
     assert.ok(audit.heroHeadline.height >= 86 && audit.heroHeadline.height <= 122, JSON.stringify(audit.heroHeadline))
@@ -104,6 +109,23 @@ app.whenReady().then(async () => {
     assert.ok(audit.actionButtons.every(rect => rect.width >= 80 && rect.height >= 40 && rect.left >= audit.card.left && rect.right <= audit.card.right), JSON.stringify(audit.actionButtons))
     assert.ok(audit.actionButtons[0].right <= audit.actionButtons[1].left)
     assert.ok(audit.buttonRects.every(rect => rect.left >= 0 && rect.right <= audit.viewport.width && rect.top >= 0 && rect.bottom <= audit.viewport.height), JSON.stringify(audit.buttonRects))
+
+    const uploadAudit = await window.webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('#image-upload')
+      const captures = []
+      input.click = () => captures.push({ capture: input.getAttribute('capture'), accept: input.getAttribute('accept'), multiple: input.multiple })
+      document.querySelector('[data-dsh-remote-upload-action="gallery"]').click()
+      document.querySelector('[data-dsh-remote-upload-action="camera"]').click()
+      input.dispatchEvent(new Event('change'))
+      return { captures, captureAfterChange: input.getAttribute('capture') }
+    })()`)
+    assert.deepEqual(uploadAudit, {
+      captures: [
+        { capture: null, accept: 'image/*', multiple: true },
+        { capture: 'environment', accept: 'image/*', multiple: true }
+      ],
+      captureAfterChange: null
+    }, JSON.stringify(uploadAudit))
 
     const modelMenuAudit = await window.webContents.executeJavaScript(`(() => {
       const question=document.querySelector('[data-question-key]'); question.style.visibility='hidden';

@@ -149,6 +149,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     '[data-dsh-remote-sidebar-column] { min-height: 0 !important; }',
     '[data-dsh-remote-desktop-entry-wrap] { box-sizing: border-box !important; flex: 0 0 40px !important; width: 100% !important; height: 40px !important; min-height: 40px !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: visible !important; }',
     '[data-dsh-remote-mobile-topbar] { display: none; }',
+    '[data-dsh-remote-upload-controls] { display: none; }',
     '@media (max-width: 720px) and (orientation: portrait) {',
     '  html, body { width: 100%; max-width: 100vw; overflow-x: hidden; }',
     '  [data-dsh-remote-app-shell] { width: 100% !important; grid-template-columns: minmax(0, 1fr) !important; }',
@@ -211,6 +212,9 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     '  [data-dsh-remote-composer-row], [data-dsh-remote-composer-trailing] { overflow: visible !important; }',
     '  [data-dsh-remote-home-composer] [data-dsh-remote-composer-row] { min-height: 82px !important; margin-top: auto !important; display: flex !important; flex-direction: column !important; justify-content: flex-end !important; gap: 14px !important; }',
     '  [data-dsh-remote-home-composer] [data-dsh-remote-composer-leading] { display: flex !important; align-items: center !important; gap: 8px !important; }',
+    '  [data-dsh-remote-upload-controls] { display: inline-flex !important; align-items: center !important; gap: 6px !important; min-width: 0 !important; }',
+    '  [data-dsh-remote-upload-controls] button { min-width: 0 !important; height: 34px !important; padding: 0 10px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 5px !important; border: 1px solid rgba(37,99,235,.20) !important; border-radius: 10px !important; background: #f8fbff !important; color: #245ea9 !important; font: 600 12px/1 system-ui,sans-serif !important; white-space: nowrap !important; }',
+    '  [data-dsh-remote-upload-controls] button svg { width: 16px !important; height: 16px !important; flex: none !important; }',
     '  [data-dsh-remote-composer-trailing] { display: grid !important; grid-template-columns: auto minmax(96px, 1fr) auto !important; align-items: center !important; gap: 6px !important; width: 100% !important; position: relative !important; }',
     '  [data-dsh-remote-home-composer] [data-dsh-remote-composer-trailing] { grid-template-columns: minmax(62px, auto) minmax(0, 1fr) 42px !important; gap: 8px !important; }',
     '  [data-dsh-remote-composer-trailing] > * { min-width: 0 !important; max-width: 100% !important; }',
@@ -284,6 +288,62 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
         }
       }
     })
+  }
+
+  const findRemoteImageInput = () => Array.from(document.querySelectorAll('input[type="file"]')).find(input => {
+    if (input.disabled) return false
+    const accepted = String(input.getAttribute('accept') || '').toLowerCase()
+    return !accepted || accepted.includes('image') || accepted.includes('*/*')
+  }) || null
+
+  const requestRemoteImageInput = (input, capture) => {
+    const token = String(Date.now()) + '-' + Math.random().toString(36).slice(2)
+    const originalCapture = input.getAttribute('capture')
+    input.dataset.dshRemoteUploadToken = token
+    if (capture) input.setAttribute('capture', 'environment')
+    else input.removeAttribute('capture')
+    const restore = () => {
+      if (input.dataset.dshRemoteUploadToken !== token) return
+      if (originalCapture === null) input.removeAttribute('capture')
+      else input.setAttribute('capture', originalCapture)
+      delete input.dataset.dshRemoteUploadToken
+    }
+    input.addEventListener('change', restore, { once: true })
+    addEventListener('focus', () => setTimeout(restore, 0), { once: true })
+    setTimeout(restore, 30_000)
+    input.click()
+  }
+
+  const ensureMobileUploadControls = () => {
+    const input = findRemoteImageInput()
+    const leading = document.querySelector('[data-dsh-remote-composer-leading]')
+    const existing = document.querySelector('[data-dsh-remote-upload-controls]')
+    if (!input || !leading) {
+      existing?.remove()
+      return
+    }
+    let controls = existing
+    if (!controls) {
+      controls = document.createElement('span')
+      controls.setAttribute('data-dsh-remote-upload-controls', '')
+      ;[
+        ['gallery', '相册', imageIcon, false],
+        ['camera', '拍照', cameraIcon, true]
+      ].forEach(([kind, label, icon, capture]) => {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.setAttribute('data-dsh-remote-upload-action', kind)
+        button.setAttribute('aria-label', label + '上传图片')
+        button.title = label + '上传图片'
+        button.innerHTML = icon + '<span>' + label + '</span>'
+        button.addEventListener('click', () => {
+          const currentInput = findRemoteImageInput()
+          if (currentInput) requestRemoteImageInput(currentInput, capture)
+        })
+        controls.appendChild(button)
+      })
+      leading.appendChild(controls)
+    } else if (controls.parentElement !== leading) leading.appendChild(controls)
   }
 
   const setMobileNavOpen = open => {
@@ -412,6 +472,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     installRemoteMobileLayout()
     markRemoteMobileLayout()
     revealRemoteControls()
+    ensureMobileUploadControls()
     ensureMobileTopbar()
   }
 
@@ -544,6 +605,8 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   const remoteMobileClient = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || (typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches)
 
   const menuIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>'
+  const imageIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8.2" cy="9" r="1.5" fill="currentColor"/><path d="m5.5 17 4.6-4.6 3.2 3.1 2-2 3.2 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  const cameraIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h3l1.2-2h7.6L17 7.5h3A1.5 1.5 0 0 1 21.5 9v9.5A1.5 1.5 0 0 1 20 20H4a1.5 1.5 0 0 1-1.5-1.5V9A1.5 1.5 0 0 1 4 7.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>'
   const desktopIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 4.8h16v11.4H4zM8.5 20h7M12 16.2V20"/></svg>'
   const settingsIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.07a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.53-1H3v-4h.07A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.07V3h4v.07a1.7 1.7 0 0 0 1.03 1.53 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.12.62.66 1.08 1.3 1.08H21v4h-.3c-.64 0-1.18.45-1.3.92Z"/></svg>'
 
