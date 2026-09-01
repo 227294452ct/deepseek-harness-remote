@@ -127,6 +127,34 @@ app.whenReady().then(async () => {
       captureAfterChange: null
     }, JSON.stringify(uploadAudit))
 
+    const uploadBridgeAudit = await window.webContents.executeJavaScript(`(async () => {
+      document.querySelector('#image-upload').remove()
+      await new Promise(resolve => setTimeout(resolve, 40))
+      const bridge = document.querySelector('[data-dsh-remote-image-bridge]')
+      const picked = new DataTransfer()
+      picked.items.add(new File(['fixture'], 'fixture-photo.jpg', { type: 'image/jpeg' }))
+      Object.defineProperty(bridge, 'files', { configurable: true, value: picked.files })
+      const drops = []
+      document.addEventListener('drop', event => {
+        drops.push(Array.from(event.dataTransfer.files).map(file => ({ name: file.name, type: file.type })))
+      }, { once: true })
+      bridge.click = () => bridge.dispatchEvent(new Event('change'))
+      document.querySelector('[data-dsh-remote-upload-action="gallery"]').click()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      return {
+        accept: bridge.getAttribute('accept'),
+        multiple: bridge.multiple,
+        captureAfterChange: bridge.getAttribute('capture'),
+        drops
+      }
+    })()`)
+    assert.deepEqual(uploadBridgeAudit, {
+      accept: 'image/*',
+      multiple: true,
+      captureAfterChange: null,
+      drops: [[{ name: 'fixture-photo.jpg', type: 'image/jpeg' }]]
+    }, JSON.stringify(uploadBridgeAudit))
+
     const modelMenuAudit = await window.webContents.executeJavaScript(`(() => {
       const question=document.querySelector('[data-question-key]'); question.style.visibility='hidden';
       const modelButton=document.querySelector('button[aria-label^="选择模型"]'); modelButton.click();

@@ -296,6 +296,41 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
     return !accepted || accepted.includes('image') || accepted.includes('*/*')
   }) || null
 
+  const dispatchRemoteImageDrop = files => {
+    if (!files.length || typeof DataTransfer !== 'function') return
+    const transfer = new DataTransfer()
+    files.forEach(file => transfer.items.add(file))
+    let event
+    if (typeof DragEvent === 'function') event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })
+    else {
+      event = new Event('drop', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'dataTransfer', { value: transfer })
+    }
+    document.dispatchEvent(event)
+  }
+
+  const ensureRemoteImageInput = () => {
+    const existing = findRemoteImageInput()
+    if (existing) return existing
+    let bridge = document.querySelector('input[data-dsh-remote-image-bridge]')
+    if (bridge) return bridge
+    bridge = document.createElement('input')
+    bridge.type = 'file'
+    bridge.accept = 'image/*'
+    bridge.multiple = true
+    bridge.tabIndex = -1
+    bridge.setAttribute('aria-hidden', 'true')
+    bridge.setAttribute('data-dsh-remote-image-bridge', '')
+    bridge.style.cssText = 'position:fixed!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;'
+    bridge.addEventListener('change', () => {
+      const files = Array.from(bridge.files || [])
+      dispatchRemoteImageDrop(files)
+      bridge.value = ''
+    })
+    ;(document.body || document.documentElement).appendChild(bridge)
+    return bridge
+  }
+
   const requestRemoteImageInput = (input, capture) => {
     const token = String(Date.now()) + '-' + Math.random().toString(36).slice(2)
     const originalCapture = input.getAttribute('capture')
@@ -315,13 +350,13 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
   }
 
   const ensureMobileUploadControls = () => {
-    const input = findRemoteImageInput()
     const leading = document.querySelector('[data-dsh-remote-composer-leading]')
     const existing = document.querySelector('[data-dsh-remote-upload-controls]')
-    if (!input || !leading) {
+    if (!leading) {
       existing?.remove()
       return
     }
+    ensureRemoteImageInput()
     let controls = existing
     if (!controls) {
       controls = document.createElement('span')
@@ -337,8 +372,7 @@ const MOBILE_COMPAT_SCRIPT = `'use strict';
         button.title = label + '上传图片'
         button.innerHTML = icon + '<span>' + label + '</span>'
         button.addEventListener('click', () => {
-          const currentInput = findRemoteImageInput()
-          if (currentInput) requestRemoteImageInput(currentInput, capture)
+          requestRemoteImageInput(ensureRemoteImageInput(), capture)
         })
         controls.appendChild(button)
       })
