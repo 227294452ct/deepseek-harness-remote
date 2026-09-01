@@ -115,9 +115,18 @@ async function main() {
     probe: root => root === 'F:\\' ? Promise.resolve() : root === 'Z:\\' ? new Promise(() => {}) : Promise.reject(new Error('missing'))
   })
   assert.deepEqual(roots, ['F:\\'])
+  let lastHtmlRequestHeaders = null
   const upstream = http.createServer((request, response) => {
     if (String(request.headers.accept || '').includes('text/html')) {
+      lastHtmlRequestHeaders = request.headers
+      if (request.headers['if-none-match'] || request.headers['if-modified-since']) {
+        response.writeHead(304)
+        response.end()
+        return
+      }
       response.setHeader('Content-Type', 'text/html; charset=utf-8')
+      response.setHeader('ETag', '"stale-document"')
+      response.setHeader('Last-Modified', 'Wed, 01 Jan 2025 00:00:00 GMT')
       response.end('<!doctype html><html><head><script>window.upstreamBooted=true</script></head><body>Harness</body></html>')
       return
     }
@@ -192,8 +201,20 @@ async function main() {
     const drives = await fetch(`${base}${API_PREFIX}/drives`, { headers: browserHeaders })
     assert.equal(drives.status, 200)
     assert.ok(Array.isArray((await drives.json()).drives))
-    const compatPage = await fetch(base, { headers: { ...browserHeaders, Accept: 'text/html' } })
+    const compatPage = await fetch(base, { headers: {
+      ...browserHeaders,
+      Accept: 'text/html',
+      'If-None-Match': '"stale-document"',
+      'If-Modified-Since': 'Wed, 01 Jan 2025 00:00:00 GMT'
+    } })
     assert.equal(compatPage.status, 200)
+    assert.equal(lastHtmlRequestHeaders['if-none-match'], undefined)
+    assert.equal(lastHtmlRequestHeaders['if-modified-since'], undefined)
+    assert.equal(compatPage.headers.get('cache-control'), 'no-store, no-cache, must-revalidate')
+    assert.equal(compatPage.headers.get('pragma'), 'no-cache')
+    assert.equal(compatPage.headers.get('expires'), '0')
+    assert.equal(compatPage.headers.get('etag'), null)
+    assert.equal(compatPage.headers.get('last-modified'), null)
     const compatHtml = await compatPage.text()
     assert.ok(compatHtml.indexOf('/_dsh_remote/compat.js') < compatHtml.indexOf('window.upstreamBooted'))
     const compatScript = await fetch(`${base}/_dsh_remote/compat.js`, { headers: browserHeaders })
@@ -218,6 +239,8 @@ async function main() {
     assert.match(compatSource, /history\.pushState\(\{ dshRemoteDesktop: true \}/)
     assert.match(compatSource, /DOMMatrixReadOnly/)
     assert.match(compatSource, /data-dsh-remote-composer-heading/)
+    assert.match(compatSource, /data-dsh-remote-mobile-topbar/)
+    assert.match(compatSource, /data-dsh-remote-home-composer/)
     assert.match(compatSource, /\[role="menu"\]/)
     assert.doesNotMatch(compatSource, /tapTimer/)
     assert.doesNotThrow(() => new vm.Script(compatSource))

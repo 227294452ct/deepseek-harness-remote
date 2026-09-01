@@ -28,7 +28,7 @@ app.whenReady().then(async () => {
     await new Promise(resolve => setTimeout(resolve, 80))
     await window.webContents.executeJavaScript(`new Promise((resolve, reject) => { const started=Date.now(); const poll=()=>{ if(document.querySelector('[data-dsh-remote-desktop-entry]'))resolve(); else if(Date.now()-started>3000)reject(new Error('desktop entry timed out')); else setTimeout(poll,25) }; poll() })`)
     const audit = await window.webContents.executeJavaScript(`(() => {
-      const visibleButtons = [...document.querySelectorAll('button')].filter(button => button.getClientRects().length > 0)
+      const visibleButtons = [...document.querySelectorAll('button')].filter(button => button.getClientRects().length > 0 && !button.closest('[inert]') && getComputedStyle(button).visibility !== 'hidden')
       const buttonRects = visibleButtons.map(button => {
         const rect = button.getBoundingClientRect()
         return { text: button.textContent.trim(), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height }
@@ -37,9 +37,14 @@ app.whenReady().then(async () => {
       const actions = document.querySelector('[data-question-key] > section > footer > :last-child').getBoundingClientRect()
       const settingsButton = document.querySelector('button[aria-haspopup="dialog"][aria-expanded]')
       const desktopButton = document.querySelector('[data-dsh-remote-desktop-entry]')
+      const topbar = document.querySelector('[data-dsh-remote-mobile-topbar]')
+      const topbarDesktop = topbar.querySelector('[data-dsh-mobile-action="desktop"]')
+      const topbarSettings = topbar.querySelector('[data-dsh-mobile-action="settings"]')
+      const heroMark = document.querySelector('[data-dsh-remote-hero-mark-wrap]')
       const sendButton = document.querySelector('[data-dsh-remote-send]')
       const heroHeading = document.querySelector('[data-dsh-remote-composer-heading]')
       const heroHeadline = heroHeading?.querySelector('.hero-headline')
+      const composerCard = document.querySelector('[data-dsh-remote-home-composer] [data-dsh-remote-composer-card]')
       const rectOf = node => { const rect=node.getBoundingClientRect(); return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height} }
       const actionButtons = [...document.querySelectorAll('[data-question-key] > section > footer > :last-child > button')].map(button => {
         const rect = button.getBoundingClientRect()
@@ -52,12 +57,19 @@ app.whenReady().then(async () => {
         sessionLogLabel: document.querySelector('[data-dsh-remote-session-log]')?.getAttribute('aria-label'),
         desktopEntryLabel: document.querySelector('[data-dsh-remote-desktop-entry]')?.getAttribute('aria-label'),
         settingsLabel: settingsButton?.getAttribute('aria-label'),
+        topbar: rectOf(topbar),
+        topbarActions: [...topbar.querySelectorAll('[data-dsh-mobile-action]')].map(node => node.getAttribute('data-dsh-mobile-action')),
+        topbarDesktop: rectOf(topbarDesktop),
+        topbarSettings: rectOf(topbarSettings),
+        sidebarInert: document.querySelector('[data-dsh-remote-sidebar-column]').inert,
         sidebarFootHeight: document.querySelector('[data-dsh-remote-sidebar-foot]')?.getBoundingClientRect().height,
-        settingsButton: rectOf(settingsButton),
-        desktopButton: rectOf(desktopButton),
         sendButton: rectOf(sendButton),
+        composerCard: rectOf(composerCard),
+        heroHeading: rectOf(heroHeading),
         heroHeadingClass: heroHeading?.className,
         heroHeadline: heroHeadline ? rectOf(heroHeadline) : null,
+        heroMark: heroMark ? rectOf(heroMark) : null,
+        heroMarkPointerEvents: heroMark ? getComputedStyle(heroMark).pointerEvents : null,
         footerDisplay: getComputedStyle(document.querySelector('[data-question-key] > section > footer')).display,
         actionsColumns: getComputedStyle(document.querySelector('[data-question-key] > section > footer > :last-child')).gridTemplateColumns,
         card: { left: card.left, right: card.right, width: card.width },
@@ -73,14 +85,20 @@ app.whenReady().then(async () => {
     assert.equal(audit.sessionLogLabel, 'Session log')
     assert.equal(audit.desktopEntryLabel, '桌面')
     assert.equal(audit.settingsLabel, '设置')
+    assert.ok(audit.topbar.left === 0 && audit.topbar.right === audit.viewport.width && audit.topbar.height >= 55, JSON.stringify(audit.topbar))
+    assert.deepEqual(audit.topbarActions, ['menu', 'desktop', 'settings'], JSON.stringify(audit.topbarActions))
+    assert.equal(audit.sidebarInert, true)
     assert.ok(audit.sidebarFootHeight >= 94, JSON.stringify(audit))
-    assert.ok(audit.desktopButton.bottom <= audit.settingsButton.top, JSON.stringify({ desktop: audit.desktopButton, settings: audit.settingsButton }))
-    assert.ok(audit.desktopButton.top >= 0 && audit.settingsButton.bottom <= audit.viewport.height, JSON.stringify(audit))
-    assert.ok(audit.sendButton.width >= 33 && audit.sendButton.right <= audit.viewport.width && audit.sendButton.left >= 64, JSON.stringify(audit.sendButton))
+    assert.ok(audit.topbarDesktop.top >= 0 && audit.topbarSettings.bottom <= audit.viewport.height, JSON.stringify(audit))
+    assert.ok(audit.sendButton.width >= 41 && audit.sendButton.right <= audit.viewport.width && audit.sendButton.left >= 18, JSON.stringify(audit.sendButton))
+    assert.ok(audit.composerCard.left >= 18 && audit.composerCard.right <= audit.viewport.width - 18 && audit.composerCard.top >= 0 && audit.composerCard.bottom <= audit.viewport.height && audit.composerCard.height >= 248, JSON.stringify(audit.composerCard))
     assert.equal(audit.heroHeadingClass, 'hero-heading', JSON.stringify(audit))
-    assert.ok(audit.heroHeadline.height <= 34, JSON.stringify(audit.heroHeadline))
+    assert.ok(audit.heroHeading.height >= 86 && audit.heroHeading.height <= 122, JSON.stringify(audit.heroHeading))
+    assert.ok(audit.heroHeadline.height >= 86 && audit.heroHeadline.height <= 122, JSON.stringify(audit.heroHeadline))
+    assert.ok(audit.heroMark.top >= audit.heroHeadline.top && audit.heroMark.bottom < audit.heroHeadline.bottom, JSON.stringify(audit.heroMark))
+    assert.equal(audit.heroMarkPointerEvents, 'none')
     assert.equal(audit.footerDisplay, 'grid')
-    assert.ok(audit.card.left >= 64 && audit.card.right <= audit.viewport.width, JSON.stringify(audit.card))
+    assert.ok(audit.card.left >= 0 && audit.card.right <= audit.viewport.width, JSON.stringify(audit.card))
     assert.ok(audit.actions.left >= audit.card.left && audit.actions.right <= audit.card.right, JSON.stringify(audit.actions))
     assert.equal(audit.actionButtons.length, 2)
     assert.ok(audit.actionButtons.every(rect => rect.width >= 80 && rect.height >= 40 && rect.left >= audit.card.left && rect.right <= audit.card.right), JSON.stringify(audit.actionButtons))
@@ -88,8 +106,9 @@ app.whenReady().then(async () => {
     assert.ok(audit.buttonRects.every(rect => rect.left >= 0 && rect.right <= audit.viewport.width && rect.top >= 0 && rect.bottom <= audit.viewport.height), JSON.stringify(audit.buttonRects))
 
     const modelMenuAudit = await window.webContents.executeJavaScript(`(() => {
-      const modelButton=document.querySelector('button[aria-haspopup="menu"]'); modelButton.click();
-      const menu=document.querySelector('[role="menu"]'); const rect=menu.getBoundingClientRect(); const trailing=menu.closest('[data-dsh-remote-composer-trailing]');
+      const question=document.querySelector('[data-question-key]'); question.style.visibility='hidden';
+      const modelButton=document.querySelector('button[aria-label^="选择模型"]'); modelButton.click();
+      const menu=modelButton.parentElement.querySelector('[role="menu"]'); const rect=menu.getBoundingClientRect(); const trailing=menu.closest('[data-dsh-remote-composer-trailing]');
       const hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
       return {expanded:modelButton.getAttribute('aria-expanded'),hidden:menu.hidden,rect:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height},trailingOverflow:getComputedStyle(trailing).overflow,hitMenu:Boolean(hit&&hit.closest('[role="menu"]'))};
     })()`)
@@ -97,10 +116,45 @@ app.whenReady().then(async () => {
     assert.equal(modelMenuAudit.hidden, false, JSON.stringify(modelMenuAudit))
     assert.equal(modelMenuAudit.trailingOverflow, 'visible', JSON.stringify(modelMenuAudit))
     assert.equal(modelMenuAudit.hitMenu, true, JSON.stringify(modelMenuAudit))
-    assert.ok(modelMenuAudit.rect.left >= 64 && modelMenuAudit.rect.right <= audit.viewport.width && modelMenuAudit.rect.top >= 0 && modelMenuAudit.rect.bottom <= audit.viewport.height, JSON.stringify(modelMenuAudit))
-    await window.webContents.executeJavaScript(`document.querySelector('button[aria-haspopup="menu"]').click()`)
+    assert.ok(modelMenuAudit.rect.left >= 18 && modelMenuAudit.rect.right <= audit.viewport.width && modelMenuAudit.rect.top >= 0 && modelMenuAudit.rect.bottom <= audit.viewport.height, JSON.stringify(modelMenuAudit))
+    const modelClosed = await window.webContents.executeJavaScript(`(() => { const button=document.querySelector('button[aria-label^="选择模型"]'); button.click(); const menu=button.parentElement.querySelector('[role="menu"]'); document.querySelector('[data-question-key]').style.visibility=''; return {expanded:button.getAttribute('aria-expanded'),hidden:menu.hidden,display:getComputedStyle(menu).display} })()`)
+    assert.deepEqual(modelClosed, { expanded: 'false', hidden: true, display: 'none' }, JSON.stringify(modelClosed))
 
-    await window.webContents.executeJavaScript(`document.querySelector('[data-dsh-remote-desktop-entry]').click()`)
+    const navAudit = await window.webContents.executeJavaScript(`(async () => { const trigger=document.querySelector('[data-dsh-mobile-action="menu"]'); trigger.click(); const sidebar=document.querySelector('[data-dsh-remote-sidebar-column]'); let rect=sidebar.getBoundingClientRect(); const opened={open:document.documentElement.hasAttribute('data-dsh-mobile-nav-open'),inert:sidebar.inert,visibility:getComputedStyle(sidebar).visibility,left:rect.left,right:rect.right,height:rect.height}; document.querySelector('button[aria-label="搜索会话"]').click(); await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))); rect=sidebar.getBoundingClientRect(); const input=sidebar.querySelector('input').getBoundingClientRect(); const result=sidebar.querySelector('.drawer-copy p').getBoundingClientRect(); const expanded={marked:sidebar.hasAttribute('data-dsh-remote-sidebar-expanded'),left:rect.left,right:rect.right,width:rect.width,height:rect.height,input:{left:input.left,right:input.right,width:input.width},result:{left:result.left,right:result.right,width:result.width}}; trigger.click(); return {opened,expanded,closed:{open:document.documentElement.hasAttribute('data-dsh-mobile-nav-open'),inert:sidebar.inert,visibility:getComputedStyle(sidebar).visibility}} })()`)
+    assert.deepEqual(navAudit.opened, { open: true, inert: false, visibility: 'visible', left: 0, right: 64, height: audit.viewport.height - 56 }, JSON.stringify(navAudit))
+    assert.equal(navAudit.expanded.marked, true, JSON.stringify(navAudit))
+    assert.ok(navAudit.expanded.width >= 270 && navAudit.expanded.right <= audit.viewport.width, JSON.stringify(navAudit))
+    assert.equal(navAudit.expanded.height, audit.viewport.height - 56, JSON.stringify(navAudit))
+    assert.ok(navAudit.expanded.input.width >= 150 && navAudit.expanded.input.left >= 56 && navAudit.expanded.input.right <= navAudit.expanded.right, JSON.stringify(navAudit))
+    assert.ok(navAudit.expanded.result.width >= 150 && navAudit.expanded.result.left >= 56 && navAudit.expanded.result.right <= navAudit.expanded.right, JSON.stringify(navAudit))
+    assert.deepEqual(navAudit.closed, { open: false, inert: true, visibility: 'hidden' }, JSON.stringify(navAudit))
+
+    const settingsAudit = await window.webContents.executeJavaScript(`(async () => {
+      const source=document.querySelector('[data-dsh-remote-sidebar-settings] button[aria-haspopup="dialog"]');
+      document.querySelector('[data-dsh-mobile-action="settings"]').click();
+      await new Promise(resolve => setTimeout(resolve, 80));
+      const dialog=document.querySelector('[role="dialog"]'); const rect=dialog.getBoundingClientRect();
+      return {expanded:source.getAttribute('aria-expanded'),opened:document.documentElement.hasAttribute('data-fixture-settings-open'),mobileSettingsOpen:document.documentElement.hasAttribute('data-dsh-mobile-settings-open'),sidebarInert:document.querySelector('[data-dsh-remote-sidebar-column]').inert,dialog:{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom}};
+    })()`)
+    assert.equal(settingsAudit.expanded, 'true', JSON.stringify(settingsAudit))
+    assert.equal(settingsAudit.opened, true, JSON.stringify(settingsAudit))
+    assert.equal(settingsAudit.mobileSettingsOpen, true, JSON.stringify(settingsAudit))
+    assert.equal(settingsAudit.sidebarInert, false, JSON.stringify(settingsAudit))
+    assert.ok(Math.abs(settingsAudit.dialog.left) < 1 && Math.abs(settingsAudit.dialog.top - 56) < 1 && Math.abs(settingsAudit.dialog.right - audit.viewport.width) < 1 && Math.abs(settingsAudit.dialog.bottom - audit.viewport.height) < 1, JSON.stringify(settingsAudit.dialog))
+    await window.webContents.executeJavaScript(`document.querySelector('[data-fixture-settings-close]').click()`)
+    const settingsClosed = await window.webContents.executeJavaScript(`new Promise(resolve => setTimeout(() => { const sidebar=document.querySelector('[data-dsh-remote-sidebar-column]'); resolve({expanded:document.querySelector('[data-dsh-remote-sidebar-settings] button[aria-haspopup="dialog"]').getAttribute('aria-expanded'),mobileSettingsOpen:document.documentElement.hasAttribute('data-dsh-mobile-settings-open'),sidebarInert:sidebar.inert,dialog:Boolean(document.querySelector('[role="dialog"]'))}) }, 80))`)
+    assert.deepEqual(settingsClosed, { expanded: 'false', mobileSettingsOpen: false, sidebarInert: true, dialog: false }, JSON.stringify(settingsClosed))
+
+    const homeScreenshotPath = process.env.DSH_REMOTE_HOME_SCREENSHOT
+    if (homeScreenshotPath) {
+      await window.webContents.executeJavaScript(`(() => { const question=document.querySelector('[data-question-key]'); window.__dshQuestionCapture={node:question,parent:question.parentElement,next:question.nextSibling}; question.remove(); document.querySelectorAll('[role="menu"]').forEach(menu=>{menu.hidden=true}) })()`)
+      await new Promise(resolve => setTimeout(resolve, 40))
+      mkdirSync(path.dirname(homeScreenshotPath), { recursive: true })
+      writeFileSync(homeScreenshotPath, (await window.webContents.capturePage()).toPNG())
+      await window.webContents.executeJavaScript(`(() => { const saved=window.__dshQuestionCapture; if(saved.next&&saved.next.parentElement===saved.parent)saved.parent.insertBefore(saved.node,saved.next); else saved.parent.appendChild(saved.node); delete window.__dshQuestionCapture })()`)
+    }
+
+    await window.webContents.executeJavaScript(`document.querySelector('[data-dsh-mobile-action="desktop"]').click()`)
     await window.webContents.executeJavaScript(`new Promise((resolve, reject) => { const started=Date.now(); const poll=()=>{ const node=document.querySelector('[data-dsh-remote-desktop-viewer]'); if(node&&node.querySelectorAll('select option').length===2)resolve(); else if(Date.now()-started>3000)reject(new Error('viewer timed out')); else setTimeout(poll,25) }; poll() })`)
     const portraitViewer = await window.webContents.executeJavaScript(`(() => { const viewer=document.querySelector('[data-dsh-remote-desktop-viewer]'); const rect=viewer.getBoundingClientRect(); return {left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom,options:viewer.querySelectorAll('select option').length,status:viewer.querySelector('[data-dsh-remote-desktop-status]').textContent,historyState:history.state&&history.state.dshRemoteDesktop} })()`)
     assert.ok(Math.abs(portraitViewer.left) < 1 && Math.abs(portraitViewer.top) < 1 && Math.abs(portraitViewer.right - audit.viewport.width) < 1 && Math.abs(portraitViewer.bottom - audit.viewport.height) < 1, JSON.stringify(portraitViewer))

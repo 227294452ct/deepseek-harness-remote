@@ -10,6 +10,12 @@
     button { font: inherit; }
     .app { display: grid; grid-template-columns: 64px minmax(0, 1fr); width: 100%; height: 100%; overflow: hidden; }
     .rail { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 24px 0; border-right: 1px solid #e5e7eb; background: #f8fafc; }
+    .rail.expanded { align-items: flex-start; }
+    .rail.expanded > :not(.drawer-copy):not(.foot-area) { margin-left: 14px; }
+    .drawer-copy { display: none; margin: -68px 12px 0 64px; min-width: 0; width: calc(100% - 76px); color: #334155; }
+    .rail.expanded .drawer-copy { display: block; }
+    .drawer-copy input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #d1d5db; border-radius: 10px; }
+    .drawer-copy p { margin: 14px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rail-mark { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #111827; color: #fff; font-weight: 800; }
     .rail-button { width: 40px; height: 40px; border: 0; border-radius: 12px; background: transparent; color: #111827; font-size: 22px; }
     .foot-area { flex: none; margin-top: auto; width: 100%; height: 54px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
@@ -49,7 +55,7 @@
     .actions .primary { border-color: #111827; background: #111827; color: #fff; }
     .composer-stack { flex: none; width: 100%; padding: 0 8px 10px; }
     .hero-glow { display: block; width: 100%; height: 12px; }
-    .hero-heading { display: flex; align-items: center; width: 100%; padding: 0 24px; }
+    .hero-heading { display: flex; align-items: center; width: 100%; height: 100%; padding: 0 24px; }
     .hero-headline { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; font-size: 26px; line-height: 32px; }
     .hero-brand { display: contents; }
     .hero-preview { font-size: 13px; }
@@ -76,7 +82,8 @@
       <div class="rail-mark">鲸</div>
       <button class="rail-button" aria-label="新会话">＋</button>
       <button class="rail-button" aria-label="工作区">□</button>
-      <button class="rail-button" aria-label="搜索">⌕</button>
+      <button class="rail-button search" aria-label="搜索会话" aria-expanded="false">⌕</button>
+      <section class="drawer-copy" aria-label="会话搜索结果"><input type="text" placeholder="搜索会话…"><p>你好，介绍一下自己</p><p>关闭电脑自动打卡脚本</p><p>问候与问候回复</p></section>
       <div class="foot-area">
         <div class="settings-area">
           <div data-slot="sidebar.settings">
@@ -109,6 +116,7 @@
       <div class="composer-stack">
         <svg class="hero-glow" viewBox="0 0 100 12" aria-hidden="true"><rect width="100" height="12" fill="transparent" /></svg>
         <div class="hero-heading"><div class="hero-headline"><span><span class="hero-brand" data-slot="conversation.hero.brand.mark">鲸</span></span><span>探索未至之境</span><span class="hero-preview">预览版</span></div></div>
+        <div class="hero-workspace-row"><button aria-label="选择工作区">▣ 工作区 2⌄</button><button aria-label="选择模式">标准模式⌄</button></div>
         <div data-slot="conversation.composer.bar">
           <div class="composer-root">
             <div class="composer-card">
@@ -157,6 +165,30 @@
       const open = modelButton.getAttribute('aria-expanded') !== 'true'
       modelButton.setAttribute('aria-expanded', String(open))
       modelMenu.hidden = !open
+    })
+    const settingsButton = document.querySelector('.settings')
+    const searchButton = document.querySelector('.search')
+    const sidebar = document.querySelector('.rail')
+    searchButton.addEventListener('click', () => {
+      const expanded = searchButton.getAttribute('aria-expanded') !== 'true'
+      searchButton.setAttribute('aria-expanded', String(expanded))
+      sidebar.classList.toggle('expanded', expanded)
+      sidebar.style.width = expanded ? '280px' : '64px'
+    })
+    settingsButton.addEventListener('click', () => {
+      settingsButton.setAttribute('aria-expanded', 'true')
+      document.documentElement.setAttribute('data-fixture-settings-open', '')
+      if (document.querySelector('[data-fixture-settings-overlay]')) return
+      const overlay = document.createElement('div')
+      overlay.setAttribute('role', 'presentation')
+      overlay.setAttribute('data-fixture-settings-overlay', '')
+      overlay.innerHTML = '<section role="dialog" aria-modal="true"><header><strong>设置</strong><button type="button" data-fixture-settings-close>关闭</button></header><p>通用设置</p><p>模型与外观</p></section>'
+      settingsButton.parentElement.appendChild(overlay)
+      overlay.querySelector('[data-fixture-settings-close]').addEventListener('click', () => {
+        settingsButton.setAttribute('aria-expanded', 'false')
+        document.documentElement.removeAttribute('data-fixture-settings-open')
+        overlay.remove()
+      })
     })
   </script>
 </body>
