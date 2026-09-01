@@ -8,9 +8,12 @@ const net = require('node:net')
 const os = require('node:os')
 const path = require('node:path')
 const vm = require('node:vm')
-const { RemoteGateway, API_PREFIX, listDriveRoots } = require('./remote-gateway.cjs')
+const { RemoteGateway, API_PREFIX, listDriveRoots, extractQuickTunnelUrl } = require('./remote-gateway.cjs')
 const { EventEmitter } = require('node:events')
 const { WebSocket } = require('ws')
+
+assert.equal(extractQuickTunnelUrl('failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": EOF'), null)
+assert.equal(extractQuickTunnelUrl('request https://api.trycloudflare.com/tunnel then https://cloud-birch-example.trycloudflare.com'), 'https://cloud-birch-example.trycloudflare.com')
 
 class FakeDesktopProvider extends EventEmitter {
   constructor() {

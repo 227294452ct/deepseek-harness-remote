@@ -23,6 +23,15 @@ const DESKTOP_SOCKET_PATH = `${API_PREFIX}/desktop/socket`
 const DESKTOP_MESSAGE_BYTES = 4 * 1024
 const DESKTOP_FRAME_INTERVAL_MS = Math.ceil(1000 / 10)
 const DESKTOP_HEARTBEAT_TIMEOUT_MS = 15_000
+
+function extractQuickTunnelUrl(output) {
+  const matches = String(output).matchAll(/https:\/\/[a-z0-9-]+\.trycloudflare\.com\b/gi)
+  for (const match of matches) {
+    const value = match[0].toLowerCase()
+    if (value !== 'https://api.trycloudflare.com') return value
+  }
+  return null
+}
 const DESKTOP_MAX_BUFFERED_BYTES = 192 * 1024
 const MOBILE_COMPAT_SCRIPT = `'use strict';
 (() => {
@@ -1483,10 +1492,10 @@ class RemoteGateway extends EventEmitter {
         const text = chunk.toString('utf8')
         this.log(`Tunnel: ${text.trim()}`)
         output = `${output}${text}`.slice(-65_536)
-        const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i)
-        if (match) {
+        const tunnelUrl = extractQuickTunnelUrl(output)
+        if (tunnelUrl) {
           this.tunnelState = 'Connected'
-          finish(null, match[0].toLowerCase())
+          finish(null, tunnelUrl)
         }
       }
       child.stdout.on('data', consume)
@@ -2176,4 +2185,4 @@ class RemoteGateway extends EventEmitter {
   }
 }
 
-module.exports = { RemoteGateway, API_PREFIX, COOKIE_NAME, MOBILE_COMPAT_SCRIPT, listDriveRoots }
+module.exports = { RemoteGateway, API_PREFIX, COOKIE_NAME, MOBILE_COMPAT_SCRIPT, listDriveRoots, extractQuickTunnelUrl }

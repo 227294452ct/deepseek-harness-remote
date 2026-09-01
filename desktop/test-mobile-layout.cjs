@@ -129,8 +129,12 @@ app.whenReady().then(async () => {
 
     const uploadBridgeAudit = await window.webContents.executeJavaScript(`(async () => {
       document.querySelector('#image-upload').remove()
-      await new Promise(resolve => setTimeout(resolve, 40))
+      const nativeClick = HTMLInputElement.prototype.click
+      HTMLInputElement.prototype.click = () => {}
+      document.querySelector('[data-dsh-remote-upload-action="gallery"]').click()
+      HTMLInputElement.prototype.click = nativeClick
       const bridge = document.querySelector('[data-dsh-remote-image-bridge]')
+      if (!bridge) throw new Error('fallback image bridge was not created')
       const picked = new DataTransfer()
       picked.items.add(new File(['fixture'], 'fixture-photo.jpg', { type: 'image/jpeg' }))
       Object.defineProperty(bridge, 'files', { configurable: true, value: picked.files })
