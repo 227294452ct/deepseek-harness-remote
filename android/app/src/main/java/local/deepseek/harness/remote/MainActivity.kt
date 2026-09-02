@@ -49,8 +49,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -95,8 +93,10 @@ class MainActivity : FragmentActivity() {
     private var backDecisionPending = false
     private var webViewRendererGone = false
 
-    private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
-        result.contents?.let(::handlePairingUri)
+    private val scanLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringExtra(ScanPairingActivity.EXTRA_QR_CONTENT)?.let(::handlePairingUri)
+        }
     }
 
     private val scannerCameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -533,12 +533,7 @@ class MainActivity : FragmentActivity() {
 
     private fun launchScanner() {
         try {
-            scanLauncher.launch(ScanOptions().apply {
-                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                setPrompt("扫描 DeepSeek Harness 桌面端配对码")
-                setBeepEnabled(false)
-                setOrientationLocked(false)
-            })
+            scanLauncher.launch(Intent(this, ScanPairingActivity::class.java))
         } catch (error: Exception) {
             showWelcome("无法启动扫码相机：${friendlyError(error)}。你也可以粘贴配对链接。")
         }

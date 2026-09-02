@@ -33,6 +33,11 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <activity
+            android:name=".ScanPairingActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.DeepSeekRemote.Scanner" />
+        <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true"
