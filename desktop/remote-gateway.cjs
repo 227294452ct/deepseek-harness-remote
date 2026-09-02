@@ -17,6 +17,8 @@ const CHALLENGE_TTL_MS = 60_000
 const SESSION_TTL_MS = 60 * 60_000
 const MAX_JSON_BYTES = 1024 * 1024
 const TUNNEL_START_TIMEOUT_MS = 45_000
+const TUNNEL_RETRY_BASE_DELAY_MS = 1_500
+const TUNNEL_RETRY_MAX_DELAY_MS = 30_000
 const PUBLIC_TUNNEL_IDENTITY = '内置安全隧道'
 const MOBILE_COMPAT_PATH = '/_dsh_remote/compat.js'
 const DESKTOP_SOCKET_PATH = `${API_PREFIX}/desktop/socket`
@@ -31,6 +33,11 @@ function extractQuickTunnelUrl(output) {
     if (value !== 'https://api.trycloudflare.com') return value
   }
   return null
+}
+
+function tunnelRetryDelayMs(failedAttempts) {
+  const exponent = Math.max(0, Number(failedAttempts) - 1)
+  return Math.min(TUNNEL_RETRY_MAX_DELAY_MS, TUNNEL_RETRY_BASE_DELAY_MS * (2 ** exponent))
 }
 const DESKTOP_MAX_BUFFERED_BYTES = 192 * 1024
 const MOBILE_COMPAT_SCRIPT = `'use strict';
@@ -1356,6 +1363,8 @@ class RemoteGateway extends EventEmitter {
     this.tunnelProcess = null
     this.tunnelState = 'Stopped'
     this.tunnelError = ''
+    this.tunnelRetryTimer = null
+    this.tunnelRetryAttempt = 0
     this.server = null
     this.proxy = null
     this.gatewayPort = null
@@ -1461,12 +1470,49 @@ class RemoteGateway extends EventEmitter {
       }
     } catch (error) {
       this.tunnelError = error instanceof Error ? error.message : String(error)
-      await this.stop(false)
-      throw error
+      this.tunnelState = 'Retrying'
+      this.log(`安全隧道启动失败，将自动重试：${this.tunnelError}`)
+      this.scheduleTunnelRetry()
+      this.emit('status', this.getStatus())
+      return this.getStatus()
     }
     this.log(`Remote gateway ready at ${this.remoteUrl} -> http://127.0.0.1:${this.gatewayPort}`)
     this.emit('status', this.getStatus())
     return this.getStatus()
+  }
+
+  scheduleTunnelRetry() {
+    if (this.skipTunnel || this.server === null || this.remoteUrl !== null || this.tunnelRetryTimer !== null) return
+    const nextAttempt = this.tunnelRetryAttempt + 1
+    const delayMs = tunnelRetryDelayMs(nextAttempt)
+    this.tunnelState = 'Retrying'
+    this.tunnelError = `安全隧道暂时不可用，将在 ${Math.ceil(delayMs / 1000)} 秒后自动重试（第 ${nextAttempt} 次）。`
+    this.log(this.tunnelError)
+    this.emit('status', this.getStatus())
+    this.tunnelRetryTimer = setTimeout(() => {
+      this.tunnelRetryTimer = null
+      void this.retryPublicTunnel()
+    }, delayMs)
+  }
+
+  async retryPublicTunnel() {
+    if (this.skipTunnel || this.server === null || this.remoteUrl !== null || this.tunnelProcess !== null) return
+    this.tunnelRetryAttempt += 1
+    this.tunnelState = 'Connecting'
+    this.tunnelError = ''
+    this.emit('status', this.getStatus())
+    try {
+      this.remoteUrl = await this.startPublicTunnel()
+      this.tunnelRetryAttempt = 0
+      this.log(`安全隧道自动恢复：${this.remoteUrl} -> http://127.0.0.1:${this.gatewayPort}`)
+      this.emit('status', this.getStatus())
+    } catch (error) {
+      this.tunnelError = error instanceof Error ? error.message : String(error)
+      this.tunnelState = 'Retrying'
+      this.log(`安全隧道自动重试失败：${this.tunnelError}`)
+      this.scheduleTunnelRetry()
+      this.emit('status', this.getStatus())
+    }
   }
 
   startPublicTunnel() {
@@ -1501,6 +1547,7 @@ class RemoteGateway extends EventEmitter {
       child.stdout.on('data', consume)
       child.stderr.on('data', consume)
       child.once('error', (error) => {
+        if (this.tunnelProcess === child) this.tunnelProcess = null
         this.tunnelState = 'Failed'
         this.tunnelError = error.message
         finish(error)
@@ -1519,6 +1566,7 @@ class RemoteGateway extends EventEmitter {
           this.tunnelState = 'Disconnected'
           this.tunnelError = `安全隧道已断开（退出代码 ${code ?? 'unknown'}）。`
           this.emit('status', this.getStatus())
+          this.scheduleTunnelRetry()
         }
       })
       const timer = setTimeout(() => {
@@ -1532,6 +1580,9 @@ class RemoteGateway extends EventEmitter {
   }
 
   async stop(disableServe = true) {
+    if (this.tunnelRetryTimer !== null) clearTimeout(this.tunnelRetryTimer)
+    this.tunnelRetryTimer = null
+    this.tunnelRetryAttempt = 0
     if (!this.stopDesktopControl('gateway-stopped')) {
       try { this.desktopProvider?.releaseAll?.() } catch (error) { this.log(`Desktop input release failed: ${error.message}`) }
     }
@@ -2185,4 +2236,4 @@ class RemoteGateway extends EventEmitter {
   }
 }
 
-module.exports = { RemoteGateway, API_PREFIX, COOKIE_NAME, MOBILE_COMPAT_SCRIPT, listDriveRoots, extractQuickTunnelUrl }
+module.exports = { RemoteGateway, API_PREFIX, COOKIE_NAME, MOBILE_COMPAT_SCRIPT, listDriveRoots, extractQuickTunnelUrl, tunnelRetryDelayMs }

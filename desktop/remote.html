@@ -77,13 +77,14 @@
   const run = async (operation) => { showError(''); try { await operation(); await refresh() } catch (error) { showError(error) } }
   function render(status) {
     const connected = status.running === true
-    $('dot').classList.toggle('on', connected)
-    $('state').textContent = connected ? '远程访问已启用' : '远程访问已暂停'
-    $('url').textContent = status.remoteUrl || ''
     const tunnel = status.tunnel || {}
+    const retrying = tunnel.state === 'Retrying' || tunnel.state === 'Connecting'
+    $('dot').classList.toggle('on', connected)
+    $('state').textContent = connected ? '远程访问已启用' : retrying ? '正在恢复远程访问' : '远程访问已暂停'
+    $('url').textContent = status.remoteUrl || ''
     $('tunnel').textContent = tunnel.installed ? `安全隧道：${tunnel.state || 'Unknown'}${tunnel.error ? ` · ${tunnel.error}` : ''}` : '安全隧道组件：缺失'
-    $('enable').disabled = connected
-    $('disable').disabled = !connected
+    $('enable').disabled = connected || retrying
+    $('disable').disabled = !connected && !retrying
     $('pair').disabled = !connected
     const desktopControl = status.desktopControl || { active: false }
     $('desktopControl').classList.toggle('visible', desktopControl.active === true)
