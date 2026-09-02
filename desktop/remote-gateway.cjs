@@ -1496,7 +1496,11 @@ class RemoteGateway extends EventEmitter {
   }
 
   async retryPublicTunnel() {
-    if (this.skipTunnel || this.server === null || this.remoteUrl !== null || this.tunnelProcess !== null) return
+    if (this.skipTunnel || this.server === null || this.remoteUrl !== null) return
+    if (this.tunnelProcess !== null) {
+      this.scheduleTunnelRetry()
+      return
+    }
     this.tunnelRetryAttempt += 1
     this.tunnelState = 'Connecting'
     this.tunnelError = ''
